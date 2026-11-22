@@ -122,11 +122,16 @@ bool IsFullscreenAppInFront() {
     HWND front = GetForegroundWindow();
     if (front && !g->settings.gameModeBrowsers && IsBrowserWindow(front)) return false;
     QUERY_USER_NOTIFICATION_STATE st;
-    if (SUCCEEDED(SHQueryUserNotificationState(&st)) &&
-        (st == QUNS_RUNNING_D3D_FULL_SCREEN || st == QUNS_BUSY || st == QUNS_PRESENTATION_MODE))
-        return true;
-    HWND fg = GetForegroundWindow();
+    bool queried = SUCCEEDED(SHQueryUserNotificationState(&st));
+    if (queried && st == QUNS_RUNNING_D3D_FULL_SCREEN) return true;  // exclusive full screen
+    HWND fg = front;
     if (!fg || fg == g->hwnd) return false;
+    // A normal maximized window is not a game, even when it covers the whole monitor
+    // (auto-hide taskbar, TranslucentTB setups...): it has a title bar. Borderless games
+    // have none, whether or not Windows considers them maximized.
+    LONG style = GetWindowLongW(fg, GWL_STYLE);
+    if ((style & WS_CAPTION) == WS_CAPTION) return false;
+    if (queried && (st == QUNS_BUSY || st == QUNS_PRESENTATION_MODE)) return true;
     wchar_t cls[64] = {};
     GetClassNameW(fg, cls, 64);
     for (const wchar_t* shell : {L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd"})
