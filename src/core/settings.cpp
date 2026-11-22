@@ -62,6 +62,9 @@ void SetAlias(const std::wstring& id, const std::wstring& alias) {
 static const wchar_t kLastKey[] = L"Software\\BatteryHub\\LastKnown";
 
 void SaveLastKnown(const BatteryReading& r) {
+    // XInput ids are slots, not devices, and its 4 coarse levels are often junk
+    // from third-party pads: never persist them.
+    if (r.id.rfind(L"xinput:", 0) == 0) return;
     // "percent|kind|conn|name"
     std::wstring v = Fmt(L"%d|%d|%d|%ls", r.percent, (int)r.kind, (int)r.conn, r.name.c_str());
     RegSetKeyValueW(HKEY_CURRENT_USER, kLastKey, r.id.c_str(), REG_SZ, v.c_str(),
@@ -76,7 +79,7 @@ std::vector<BatteryReading> LoadLastKnown() {
         wchar_t name[256], data[300];
         DWORD nameLen = 256, dataSize = sizeof(data), type = 0;
         if (RegEnumValueW(key, i, name, &nameLen, nullptr, &type, (BYTE*)data, &dataSize) != ERROR_SUCCESS) break;
-        if (type != REG_SZ) continue;
+        if (type != REG_SZ || wcsncmp(name, L"xinput:", 7) == 0) continue;
         int pct = -1, kind = 0, conn = 0, consumed = 0;
         if (swscanf(data, L"%d|%d|%d|%n", &pct, &kind, &conn, &consumed) < 3 || pct < 0 || pct > 100) continue;
         BatteryReading r;

@@ -180,10 +180,11 @@ HBITMAP ToPremultipliedDib(Bitmap& bmp, int w, int h) {
 HBITMAP RenderTaskbarStrip(const std::vector<IconSpec>& items, int height, int dpi, int* outWidth,
                            std::vector<int>* itemRight) {
     const REAL k = dpi / 96.0f;
-    const REAL glyphPx = 17 * k, textPx = 14 * k, padX = 7 * k, gap = 5 * k;
+    const REAL glyphPx = 17 * k, textPx = 14 * k, padX = 7 * k, gap = 5 * k, badgeW = 7 * k;
     StringFormat fmt(StringFormat::GenericTypographic());
     fmt.SetFormatFlags(fmt.GetFormatFlags() | StringFormatFlagsNoWrap | StringFormatFlagsMeasureTrailingSpaces);
     Font text(g_textFamily.get(), textPx, FontStyleRegular, UnitPixel);
+    Font badgeFont(g_textFamily.get(), 10 * k, FontStyleBold, UnitPixel);
     std::unique_ptr<Font> glyph, bolt;
     if (g_iconFamily) {
         glyph = std::make_unique<Font>(g_iconFamily.get(), glyphPx, FontStyleRegular, UnitPixel);
@@ -200,7 +201,7 @@ HBITMAP RenderTaskbarStrip(const std::vector<IconSpec>& items, int height, int d
         std::wstring label = (s.placeholder || s.percent < 0) ? L"--" : Fmt(L"%d%%", s.percent > 100 ? 100 : s.percent);
         RectF b;
         pg.MeasureString(label.c_str(), -1, &text, PointF(0, 0), &fmt, &b);
-        REAL w = padX + glyphPx + gap + b.Width + padX;
+        REAL w = padX + glyphPx + (s.badge ? badgeW : 0) + gap + b.Width + padX;
         labels.push_back(label);
         widths.push_back(w);
         total += w;
@@ -236,10 +237,16 @@ HBITMAP RenderTaskbarStrip(const std::vector<IconSpec>& items, int height, int d
                              &fmt, &green);
             }
         }
+        REAL textX = gx + glyphPx + gap;
+        if (s.badge) {  // controller number, subscript-style after the glyph
+            wchar_t num[4];
+            _snwprintf(num, 4, L"%d", s.badge);
+            g.DrawString(num, -1, &badgeFont, PointF(gx + glyphPx + k, height / 2.0f + k), &fmt, &ink);
+            textX += badgeW;
+        }
         RectF tb;
         g.MeasureString(labels[i].c_str(), -1, &text, PointF(0, 0), &fmt, &tb);
-        g.DrawString(labels[i].c_str(), -1, &text, PointF(gx + glyphPx + gap, (height - tb.Height) / 2 - k), &fmt,
-                     &ink);
+        g.DrawString(labels[i].c_str(), -1, &text, PointF(textX, (height - tb.Height) / 2 - k), &fmt, &ink);
         x += widths[i];
         itemRight->push_back((int)(x + 0.5f));
     }

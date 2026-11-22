@@ -23,6 +23,11 @@ struct HidInfo {
 // for keyboards/mice that Windows keeps exclusively.
 std::vector<HidInfo> HidEnumerate();
 
+// Identifies the physical device behind a collection path ("7&28d3d608" in
+// "\\?\hid#vid_..&col04#7&28d3d608&0&0003#{...}"): shared by all collections of
+// one device, different for two identical devices.
+std::wstring HidInstanceToken(const std::wstring& path);
+
 // Bluetooth / BLE / USB, deduced from the device path.
 Connection ConnFromHidPath(const std::wstring& path);
 

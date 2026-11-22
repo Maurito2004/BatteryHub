@@ -27,6 +27,7 @@ const wchar_t* GameSirName(uint16_t pid, const std::wstring& product) {
         case 0x10FD: case 0x10FE: case 0x1032: case 0x1033: case 0x1034: case 0x1035:
             return L"GameSir G7 Pro";
         case 0x1098: case 0x100F: return L"GameSir Nova 2 Lite";
+        case 0x10A9: return L"GameSir G7 Pro Xbox";
     }
     return product.empty() ? L"GameSir" : nullptr;
 }
@@ -43,7 +44,8 @@ bool ReadGameSir(HidDevice& dev, const HidModel& m, std::vector<BatteryReading>&
     const HidInfo& info = dev.info();
     if (info.outLen == 0) return false;
     BatteryReading b = BaseReading(dev, m);
-    b.id = Fmt(L"gamesir:%04x", info.pid);
+    // Per-dongle id: two identical pads/dongles must not merge into one entry.
+    b.id = Fmt(L"gamesir:%04x:%ls", info.pid, HidInstanceToken(info.path).c_str());
     if (const wchar_t* nm = GameSirName(info.pid, info.product)) b.name = nm;
     b.kind = DeviceKind::Gamepad;
     b.conn = Connection::Wireless24;
@@ -55,7 +57,10 @@ bool ReadGameSir(HidDevice& dev, const HidModel& m, std::vector<BatteryReading>&
             return n >= 20 && p[1] == 0x01 && !(p[1] == 0xF4 && p[2] == 0x00);
         };
         int n = HidTransact(dev, req, sizeof(req), r, sizeof(r), match, 1200);
-        if (n <= 0) return false;  // no answer from this collection
+        if (n <= 0) {
+            out.push_back(b);  // connected, battery unknown: still listed ("--")
+            return false;
+        }
         uint8_t v = r[19];
         if (v == 0xFF) {
             b.charge = Charge::Charging;
@@ -78,7 +83,13 @@ bool ReadGameSir(HidDevice& dev, const HidModel& m, std::vector<BatteryReading>&
         const uint8_t heartbeat[] = {0x0F, 0xF2, 0x00};
         n = HidTransact(dev, heartbeat, sizeof(heartbeat), r, sizeof(r), isState, 700);
     }
-    if (n <= 0) return false;
+    if (n <= 0) {
+        // Silent pad, e.g. G7 Pro Xbox / "Wuchang" edition (3537:10A9): GameSir Nexus reads its
+        // battery through an undocumented channel and Windows.Gaming.Input only returns a
+        // 1000/1000 mWh placeholder. List it as connected with unknown battery.
+        out.push_back(b);
+        return false;
+    }
     if (AllZero(r, n) || r[36] > 100) {
         b.online = false;  // pad asleep / off: dongle streams empty frames
     } else {

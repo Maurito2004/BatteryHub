@@ -17,9 +17,10 @@ struct IconSpec {
     bool light = false;        // light taskbar -> dark ink
     bool placeholder = false;  // "no devices" icon
     int size = 16;             // pixels (small icon metric at the taskbar DPI)
+    int badge = 0;             // 1, 2, 3... next to the glyph when several controllers are shown
 
     bool operator==(const IconSpec& o) const {
-        return kind == o.kind && percent == o.percent && charge == o.charge && stale == o.stale &&
+        return kind == o.kind && percent == o.percent && charge == o.charge && stale == o.stale && badge == o.badge &&
                low == o.low && light == o.light && placeholder == o.placeholder && size == o.size;
     }
     bool operator!=(const IconSpec& o) const { return !(*this == o); }

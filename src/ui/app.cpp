@@ -109,8 +109,22 @@ void UpdateTray() {
         it.tip = DisplayName(d.r) + L"\n" + pct + L" · " + ConnName(d.r.conn);
         if (d.r.online && d.r.charge != Charge::Unknown && d.r.charge != Charge::Discharging)
             it.tip += std::wstring(L" · ") + ChargeName(d.r.charge);
-        if (d.stale) it.tip += L"\nÚltimo valor conocido (desconectado o en reposo)";
+        if (d.r.online && d.r.percent < 0 && d.r.charge != Charge::Charging)
+            it.tip += L"\nConectado, pero no informa su batería";
+        else if (d.stale)
+            it.tip += L"\nÚltimo valor conocido (desconectado o en reposo)";
         items.push_back(it);
+    }
+    // Several controllers: number them 1, 2, 3... (glyph badge + tooltip).
+    int pads = 0;
+    for (const auto& it : items) pads += it.spec.kind == DeviceKind::Gamepad;
+    if (pads > 1) {
+        int n = 0;
+        for (auto& it : items)
+            if (it.spec.kind == DeviceKind::Gamepad) {
+                it.spec.badge = ++n;
+                it.tip = Fmt(L"Mando %d: ", n) + it.tip;
+            }
     }
     if (items.empty()) {
         TrayItem it;
@@ -228,7 +242,8 @@ void ShowMenu(POINT pt) {
                             ConnName(d.r.conn);
         if (d.r.online && (d.r.charge == Charge::Charging || d.r.charge == Charge::Full))
             text += std::wstring(L" · ") + ChargeName(d.r.charge);
-        if (d.stale) text += L" · sin conexión";
+        if (d.r.online && d.r.percent < 0 && d.r.charge != Charge::Charging) text += L" · sin dato de batería";
+        else if (d.stale) text += L" · sin conexión";
         AppendMenuW(menu, MF_STRING, ID_DEVICE_FIRST + idx, text.c_str());
         g->menuIds.push_back(d.r.id);
         ++idx;

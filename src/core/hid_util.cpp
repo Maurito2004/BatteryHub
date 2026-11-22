@@ -29,6 +29,18 @@ Connection ConnFromHidPath(const std::wstring& path) {
     return Connection::Cable;  // USB; providers refine to Wireless24 for dongles
 }
 
+std::wstring HidInstanceToken(const std::wstring& path) {
+    size_t a = path.find(L'#');
+    size_t b = a == std::wstring::npos ? a : path.find(L'#', a + 1);
+    if (b == std::wstring::npos) return L"0";
+    size_t e = path.find(L'#', b + 1);
+    std::wstring inst = Lower(path.substr(b + 1, e == std::wstring::npos ? std::wstring::npos : e - b - 1));
+    // Keep "<n>&<hash>": the trailing "&0&000X" is the collection index.
+    size_t amp = inst.find(L'&');
+    size_t amp2 = amp == std::wstring::npos ? amp : inst.find(L'&', amp + 1);
+    return amp2 == std::wstring::npos ? inst : inst.substr(0, amp2);
+}
+
 static int IfaceFromPath(const std::wstring& path) {
     std::wstring p = Lower(path);
     size_t i = p.find(L"&mi_");

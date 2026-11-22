@@ -1,7 +1,12 @@
 # BatteryHub
 
-Batería de tus periféricos inalámbricos (auriculares, mouse, teclado, joysticks) en el área de
-notificación de Windows 10/11, sin G Hub, Synapse, iCUE ni SteelSeries GG.
+Batería de tus periféricos inalámbricos (auriculares, mouse, teclado, joysticks) en la barra de
+tareas de Windows, sin G Hub, Synapse, iCUE ni SteelSeries GG.
+
+> **Compatibilidad:** probado solo en **Windows 11** (build 26300, barra con apps centradas).
+> En **Windows 10** todavía no se probó: el código usa APIs disponibles desde Windows 10 y el
+> widget de la barra busca la misma estructura (`Shell_TrayWnd` / `TrayNotifyWnd`), pero no está
+> verificado. Si algo falla ahí, el modo "área de notificación" del menú es la alternativa.
 
 - **C++17 + Win32 + GDI+**, sin runtime, sin servicio, sin admin. Un solo `.exe` portable (~330 KB).
 - ~3 MB de memoria privada en reposo.
@@ -113,12 +118,15 @@ mismo dispositivo visto por PnP y por GATT aparece una sola vez.
 | AULA F68 / F87 / F99 | 2.4 GHz, `3554:FA08/FA0A/FA10/FA11` | Mismo protocolo, sin verificar |
 | ATK 8K (Nordic nRF54, A9 Pro Max) | 2.4 GHz, `373B:*` colección `FF05/0001` | Sin verificar |
 | GameSir Cyclone 2 / G7 Pro (8K) | 2.4 GHz, `3537:*` colección `FFF0/0040` | Sin verificar (reporte `0x12`, bytes 35/36) |
-| GameSir G7 Pro edición Wuchang | 2.4 GHz, `3537:10A9` colección `FFF0/0040` | **No soportado todavía**: acepta los comandos `0F 0B`, `0F 09` y `0F F2 00` pero no responde nada. Hace falta una captura USB de GameSir Connect |
+| GameSir G7 Pro Xbox (edición Wuchang) | 2.4 GHz, `3537:10A9` colección `FFF0/0040` | **Se detecta, sin batería**: se muestra como mando conectado con `--`. No responde a `0F 0B`, `0F 09` ni `0F F2 00`, y Windows.Gaming.Input solo devuelve un valor de relleno (1000/1000 mWh). GameSir Nexus lee la batería por un canal sin documentar |
 | GameSir Nova 2 Lite | 2.4 GHz, `3537:*` colección `FF7A` | Sin verificar (byte 19, `0xFF` = cargando) |
 | DualSense / DualShock 4 | USB o Bluetooth | Sin verificar |
 
 Los mandos GameSir en modo XInput le dicen a Windows que están "por cable" y no dan nivel: por eso XInput
-los ignora y se leen por su colección de fabricante (la que usa GameSir Connect).
+los ignora y se leen por su colección de fabricante (la que usa GameSir Connect). Un mando GameSir que no
+informa batería igual aparece, atenuado y con `--`, para que sepas que está conectado. Con más de un mando
+conectado, cada uno lleva un número (1, 2, 3...) junto al ícono y en el tooltip; cada dongle tiene su
+propia identidad, así que dos mandos iguales no se mezclan.
 
 | Provider | Estado |
 |---|---|
