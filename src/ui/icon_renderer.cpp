@@ -90,7 +90,7 @@ HICON RenderTrayIcon(const IconSpec& s) {
     if (s.stale) ink = s.light ? Color(a, 130, 130, 130) : Color(a, 200, 200, 200);
     SolidBrush brush(ink);
 
-    const bool charging = s.charge == Charge::Charging;
+    const bool charging = s.charge == Charge::Charging || s.charge == Charge::Full;  // bolt = on power
     const REAL topH = S * 0.47f;
 
     // Top row: device glyph (+ lightning bolt when charging).
@@ -228,7 +228,7 @@ HBITMAP RenderTaskbarStrip(const std::vector<IconSpec>& items, int height, int d
             g.MeasureString(GlyphFor(s.kind, s.placeholder), -1, glyph.get(), PointF(0, 0), &fmt, &gb);
             g.DrawString(GlyphFor(s.kind, s.placeholder), -1, glyph.get(),
                          PointF(gx + (glyphPx - gb.Width) / 2, (height - gb.Height) / 2), &fmt, &ink);
-            if (s.charge == Charge::Charging && !s.stale) {
+            if ((s.charge == Charge::Charging || s.charge == Charge::Full) && !s.stale) {  // on power
                 SolidBrush green(s.light ? Color(255, 16, 124, 16) : Color(255, 108, 203, 95));
                 RectF bb;
                 g.MeasureString(L"", -1, bolt.get(), PointF(0, 0), &fmt, &bb);

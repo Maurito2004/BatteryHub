@@ -6,10 +6,28 @@
 //        low nibble = level 0..10, high nibble 0=discharging 1=charging 2=full
 // Over Bluetooth both pads send a reduced report until a calibration feature
 // report is read (0x02 for DS4, 0x05 for DualSense), which this reader does.
+#include <cwctype>
+
 #include "../core/log.h"
 #include "hid_models.h"
 
 namespace bh {
+
+// Controller MAC as a lowercase hex string, so the same pad gets the same id over
+// USB and Bluetooth. Bluetooth: the HID serial string is the MAC. USB: pairing-info
+// feature report (DualSense 0x09, DualShock 4 0x12), MAC at bytes 1..6, reversed.
+static std::wstring PadMac(HidDevice& dev, bool dualsense, bool bt) {
+    std::wstring mac;
+    if (bt) {
+        for (wchar_t c : dev.info().serial)
+            if (iswxdigit(c)) mac += (wchar_t)towlower(c);
+        return mac;
+    }
+    uint8_t f[64] = {(uint8_t)(dualsense ? 0x09 : 0x12)};
+    if (dev.GetFeature(f, dualsense ? 20 : 16))
+        mac = Fmt(L"%02x%02x%02x%02x%02x%02x", f[6], f[5], f[4], f[3], f[2], f[1]);
+    return mac == L"000000000000" ? L"" : mac;
+}
 
 bool ReadPlayStation(HidDevice& dev, const HidModel& m, std::vector<BatteryReading>& out) {
     const HidInfo& info = dev.info();
@@ -34,7 +52,10 @@ bool ReadPlayStation(HidDevice& dev, const HidModel& m, std::vector<BatteryReadi
         }
         uint8_t s = buf[off];
         DLOG(L"      status byte [%zu] = 0x%02X", off, s);
-        BatteryReading r = BaseReading(dev, m, bt ? L":bt" : L":usb");
+        BatteryReading r = BaseReading(dev, m);
+        std::wstring mac = PadMac(dev, dualsense, bt);
+        DLOG(L"      MAC: %ls", mac.empty() ? L"(unknown)" : mac.c_str());
+        r.id = L"ps:" + (mac.empty() ? HidInstanceToken(info.path) : mac);
         if (r.conn == Connection::Unknown) r.conn = bt ? Connection::Bluetooth : Connection::Cable;
         int level = s & 0x0F;
         if (dualsense) {

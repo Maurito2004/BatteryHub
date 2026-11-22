@@ -41,6 +41,7 @@ enum : UINT {
     ID_MODE_TASKBAR_CLOCK,  // taskbar, next to the clock
     ID_MODE_TRAY,
     ID_GAME_MODE,
+    ID_GAME_MODE_BROWSERS,
     ID_INTERVAL_FIRST = 2100,   // + index into kIntervals
     ID_THRESHOLD_FIRST = 2200,  // + index into kThresholds
 };
@@ -94,7 +95,28 @@ bool IsVisible(const TrackedDevice& d) {
 
 // Exclusive full-screen (D3D), "busy" full-screen apps, or a foreground window
 // covering its whole monitor (borderless-windowed games).
+bool IsBrowserWindow(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!proc) return false;
+    wchar_t path[MAX_PATH] = {};
+    DWORD len = MAX_PATH;
+    bool ok = QueryFullProcessImageNameW(proc, 0, path, &len) != 0;
+    CloseHandle(proc);
+    if (!ok) return false;
+    const wchar_t* exe = wcsrchr(path, L'\\');
+    exe = exe ? exe + 1 : path;
+    for (const wchar_t* b : {L"brave.exe", L"chrome.exe", L"msedge.exe", L"firefox.exe", L"opera.exe",
+                             L"opera_gx.exe", L"vivaldi.exe", L"arc.exe", L"zen.exe", L"librewolf.exe"})
+        if (!_wcsicmp(exe, b)) return true;
+    return false;
+}
+
 bool IsFullscreenAppInFront() {
+    // A browser in full screen is usually a video, not a game: ignored unless enabled.
+    HWND front = GetForegroundWindow();
+    if (front && !g->settings.gameModeBrowsers && IsBrowserWindow(front)) return false;
     QUERY_USER_NOTIFICATION_STATE st;
     if (SUCCEEDED(SHQueryUserNotificationState(&st)) &&
         (st == QUNS_RUNNING_D3D_FULL_SCREEN || st == QUNS_BUSY || st == QUNS_PRESENTATION_MODE))
@@ -307,6 +329,9 @@ void ShowMenu(POINT pt) {
                 L"Ocultar dispositivos desconectados");
     AppendMenuW(config, MF_STRING | (g->settings.gameMode ? MF_CHECKED : 0), ID_GAME_MODE,
                 L"Ocultar durante juegos a pantalla completa");
+    AppendMenuW(config,
+                MF_STRING | (g->settings.gameModeBrowsers ? MF_CHECKED : 0) | (g->settings.gameMode ? 0 : MF_GRAYED),
+                ID_GAME_MODE_BROWSERS, L"Ocultar también con el navegador a pantalla completa");
     AppendMenuW(config, MF_STRING | (IsAutostartEnabled() ? MF_CHECKED : 0), ID_AUTOSTART, L"Iniciar con Windows");
     AppendMenuW(menu, MF_POPUP, (UINT_PTR)config, L"Configuración");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -351,6 +376,9 @@ void OnCommand(UINT id) {
         UpdateTray();
     } else if (id == ID_GAME_MODE) {
         g->settings.gameMode = !g->settings.gameMode;
+        g->settings.Save();
+    } else if (id == ID_GAME_MODE_BROWSERS) {
+        g->settings.gameModeBrowsers = !g->settings.gameModeBrowsers;
         g->settings.Save();
     } else if (id == ID_HIDE_DISCONNECTED) {
         g->settings.hideDisconnected = !g->settings.hideDisconnected;

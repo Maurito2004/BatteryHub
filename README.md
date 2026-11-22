@@ -59,13 +59,16 @@ falta compilar.
 **Clic en el widget de la barra (o en cualquier ícono del tray):** lista de dispositivos con tipo, alias, porcentaje,
 conexión (BT / 2.4 GHz / Cable) y estado de carga — clic en uno para renombrarlo —, *Actualizar ahora*,
 *Configuración* (mostrar en barra de tareas / área de notificación, intervalo, umbral de batería baja,
-ocultar desconectados, ocultar durante juegos, iniciar con Windows) y *Salir*.
+ocultar desconectados, ocultar durante juegos, ocultar con el navegador a pantalla completa, iniciar con
+Windows) y *Salir*.
 
 **Modo juego** (activado por defecto): cuando hay un juego o app a pantalla completa adelante — pantalla
 completa exclusiva (D3D), las que Windows marca como "ocupado", o una ventana sin bordes que cubre todo el
 monitor — BatteryHub se oculta y **deja de consultar los dispositivos** (cero tráfico HID mientras jugás).
 Al cerrar el juego vuelve solo y actualiza enseguida. Espera 2 s de confirmación para no parpadear con
-Alt+Tab. Un video de YouTube a pantalla completa también cuenta como pantalla completa.
+Alt+Tab. Los **navegadores a pantalla completa** (Brave, Chrome, Edge, Firefox, Opera, Vivaldi, Arc, Zen,
+LibreWolf) **no** lo ocultan por defecto, porque suele ser un video; se puede cambiar con *Configuración →
+Ocultar también con el navegador a pantalla completa*.
 
 **Widget en la barra:** es una ventana hija de la barra de tareas (`Shell_TrayWnd`). Por defecto va en
 el extremo izquierdo (con las apps centradas de Windows 11 ese lado siempre está libre); también puede ir
@@ -127,7 +130,12 @@ mismo dispositivo visto por PnP y por GATT aparece una sola vez.
 | GameSir G7 Pro Xbox (edición Wuchang) | 2.4 GHz, `3537:10A9` colección `FFF0/0040` | **Se detecta, sin batería**: se muestra como mando conectado con `--`. No responde a `0F 0B`, `0F 09` ni `0F F2 00`, y Windows.Gaming.Input solo devuelve un valor de relleno (1000/1000 mWh). GameSir Nexus lee la batería por un canal sin documentar |
 | GameSir Nova 2 Lite | 2.4 GHz, `3537:*` colección `FF7A` | Sin verificar (byte 19, `0xFF` = cargando) |
 | DualSense (PS5) | Bluetooth (`054C:0CE6`, reporte `0x31`, byte 54) | **Verificado** (95–100 %, descargando) |
-| DualSense por USB / DualSense Edge / DualShock 4 | USB o Bluetooth | Mismo lector, sin verificar |
+| DualSense (PS5) por cable | USB (`054C:0CE6` MI_03, reporte `0x01`, byte 53) | **Verificado** (100 %, carga completa, con rayo) |
+| DualSense Edge / DualShock 4 | USB o Bluetooth | Mismo lector, sin verificar |
+
+El DualSense se identifica por su MAC (número de serie por Bluetooth, reporte de emparejamiento `0x09`
+por USB), así que al enchufarlo o desenchufarlo sigue siendo **el mismo dispositivo**, no aparece dos veces.
+El rayo verde se muestra mientras carga y también cuando está enchufado con la carga completa.
 
 Los mandos GameSir en modo XInput le dicen a Windows que están "por cable" y no dan nivel: por eso XInput
 los ignora y se leen por su colección de fabricante (la que usa GameSir Connect). Un mando GameSir que no

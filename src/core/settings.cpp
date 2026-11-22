@@ -32,6 +32,7 @@ void Settings::Load() {
     trayIcons = ReadDword(HKEY_CURRENT_USER, kKey, L"TrayIcons", 0) != 0;
     widgetLeft = ReadDword(HKEY_CURRENT_USER, kKey, L"WidgetLeft", 1) != 0;
     gameMode = ReadDword(HKEY_CURRENT_USER, kKey, L"GameMode", 1) != 0;
+    gameModeBrowsers = ReadDword(HKEY_CURRENT_USER, kKey, L"GameModeBrowsers", 0) != 0;
 }
 
 void Settings::Save() const {
@@ -41,6 +42,7 @@ void Settings::Save() const {
     WriteDword(L"TrayIcons", trayIcons ? 1 : 0);
     WriteDword(L"WidgetLeft", widgetLeft ? 1 : 0);
     WriteDword(L"GameMode", gameMode ? 1 : 0);
+    WriteDword(L"GameModeBrowsers", gameModeBrowsers ? 1 : 0);
 }
 
 std::wstring GetAlias(const std::wstring& id) {
