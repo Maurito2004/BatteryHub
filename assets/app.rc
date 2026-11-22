@@ -1,0 +1,47 @@
+#pragma code_page(65001)
+#include <windows.h>
+#include "resource.h"
+
+IDI_APP ICON "app.ico"
+
+1 RT_MANIFEST "app.manifest"
+
+IDD_RENAME DIALOGEX 0, 0, 250, 82
+STYLE DS_MODALFRAME | DS_CENTER | DS_SHELLFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU
+EXSTYLE WS_EX_TOPMOST
+CAPTION "BatteryHub - Renombrar dispositivo"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "", IDC_ORIGINAL, 8, 8, 234, 10, SS_ENDELLIPSIS
+    EDITTEXT        IDC_ALIAS, 8, 22, 234, 14, ES_AUTOHSCROLL
+    LTEXT           "Dejalo vacío para volver al nombre original.", IDC_HINT, 8, 42, 234, 10
+    DEFPUSHBUTTON   "Aceptar", IDOK, 138, 60, 50, 14
+    PUSHBUTTON      "Cancelar", IDCANCEL, 192, 60, 50, 14
+END
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION BH_VERSION_NUM
+ PRODUCTVERSION BH_VERSION_NUM
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "FileDescription", "BatteryHub - wireless peripheral battery in the taskbar"
+            VALUE "FileVersion", BH_VERSION_STR
+            VALUE "InternalName", "BatteryHub"
+            VALUE "OriginalFilename", "BatteryHub.exe"
+            VALUE "ProductName", "BatteryHub"
+            VALUE "ProductVersion", BH_VERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
