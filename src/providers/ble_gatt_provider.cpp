@@ -95,7 +95,7 @@ public:
             CloseHandle(h);
             DLOG(L"  %-34ls battery=%3d%%  connected=%ls  hr=0x%08lX  container=%ls", name.c_str(), level,
                  knowsConn ? (connected ? L"yes" : L"no") : L"?", (unsigned long)err, container.c_str());
-            if (level < 0 || container.empty()) continue;
+            if (level < 0 || container.empty() || (knowsConn && !connected)) continue;  // paired, not connected
 
             BatteryReading r;
             r.id = L"bt:" + container;  // same key as the PnP provider -> merged

@@ -85,7 +85,9 @@ std::vector<BatteryReading> LoadLastKnown() {
         if (RegEnumValueW(key, i, name, &nameLen, nullptr, &type, (BYTE*)data, &dataSize) != ERROR_SUCCESS) break;
         if (type != REG_SZ || wcsncmp(name, L"xinput:", 7) == 0) continue;
         int pct = -1, kind = 0, conn = 0, consumed = 0;
-        if (swscanf(data, L"%d|%d|%d|%n", &pct, &kind, &conn, &consumed) < 3 || pct < 0 || pct > 100) continue;
+        if (swscanf(data, L"%d|%d|%d|%n", &pct, &kind, &conn, &consumed) < 3 || consumed <= 0 || pct < 0 || pct > 100 ||
+            kind < 0 || kind > (int)DeviceKind::Gamepad || conn < 0 || conn > (int)Connection::Cable)
+            continue;
         BatteryReading r;
         r.id = name;
         r.percent = pct;

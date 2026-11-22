@@ -41,6 +41,12 @@ bool ReadPlayStation(HidDevice& dev, const HidModel& m, std::vector<BatteryReadi
     const uint8_t wantId = bt ? (dualsense ? 0x31 : 0x11) : 0x01;
     const size_t off = dualsense ? (bt ? 54 : 53) : (bt ? 32 : 30);
 
+    BatteryReading r = BaseReading(dev, m);
+    std::wstring mac = PadMac(dev, dualsense, bt);
+    DLOG(L"      MAC: %ls", mac.empty() ? L"(unknown)" : mac.c_str());
+    r.id = L"ps:" + (mac.empty() ? HidInstanceToken(info.path) : mac);
+    if (r.conn == Connection::Unknown) r.conn = bt ? Connection::Bluetooth : Connection::Cable;
+
     std::vector<uint8_t> buf(info.inLen > 64 ? info.inLen : 64);
     dev.FlushInput();
     for (int tries = 0; tries < 8; ++tries) {
@@ -52,11 +58,6 @@ bool ReadPlayStation(HidDevice& dev, const HidModel& m, std::vector<BatteryReadi
         }
         uint8_t s = buf[off];
         DLOG(L"      status byte [%zu] = 0x%02X", off, s);
-        BatteryReading r = BaseReading(dev, m);
-        std::wstring mac = PadMac(dev, dualsense, bt);
-        DLOG(L"      MAC: %ls", mac.empty() ? L"(unknown)" : mac.c_str());
-        r.id = L"ps:" + (mac.empty() ? HidInstanceToken(info.path) : mac);
-        if (r.conn == Connection::Unknown) r.conn = bt ? Connection::Bluetooth : Connection::Cable;
         int level = s & 0x0F;
         if (dualsense) {
             int state = s >> 4;
@@ -76,6 +77,9 @@ bool ReadPlayStation(HidDevice& dev, const HidModel& m, std::vector<BatteryReadi
         out.push_back(r);
         return true;
     }
+    // Present but no state report this time: keep it listed with its last value.
+    r.online = false;
+    out.push_back(r);
     return false;
 }
 

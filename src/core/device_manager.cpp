@@ -13,6 +13,7 @@ void DeviceManager::EnablePersistence() {
         TrackedDevice t;
         t.r = r;
         t.stale = true;
+        t.present = false;  // shown only once a poll finds it (e.g. its dongle is plugged)
         devices_.push_back(t);
     }
 }
@@ -79,7 +80,8 @@ void DeviceManager::Apply(std::vector<BatteryReading> fresh) {
             if (r.percent < 0 && !r.online) continue;
             TrackedDevice t;
             t.r = r;
-            t.stale = !r.online;
+            t.stale = !r.online || (r.percent < 0 && r.charge != Charge::Charging);
+            t.present = true;
             t.lastSeen = now;
             devices_.push_back(t);
             seen.push_back(true);
@@ -89,6 +91,7 @@ void DeviceManager::Apply(std::vector<BatteryReading> fresh) {
 
         seen[i] = true;
         auto& t = devices_[i];
+        t.present = true;
         if (r.percent >= 0 && r.online) {
             if (persist_ && (t.r.percent != r.percent || t.stale)) SaveLastKnown(r);  // only on change
             t.r = r;
@@ -109,9 +112,10 @@ void DeviceManager::Apply(std::vector<BatteryReading> fresh) {
     }
 
     for (size_t i = 0; i < seen.size() && i < devices_.size(); ++i) {
-        if (!seen[i]) {
+        if (!seen[i]) {  // gone from Windows: unplugged, switched off, out of range
             devices_[i].r.online = false;
             devices_[i].stale = true;
+            devices_[i].present = false;
         }
     }
 }

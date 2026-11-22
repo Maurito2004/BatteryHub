@@ -88,7 +88,11 @@ int TrayIconSize() {
     return MulDiv(16, dpi, 96);
 }
 
+// Shown only while the device (or its dongle) is present. A present device that
+// does not answer (asleep) keeps its last value, dimmed; an unplugged or switched-off
+// one (Bluetooth pad turned off, cable removed, dongle pulled) disappears.
 bool IsVisible(const TrackedDevice& d) {
+    if (!d.present) return false;
     if (g->settings.hideDisconnected && !d.r.online) return false;
     return d.r.percent >= 0 || d.r.online;
 }
@@ -159,7 +163,7 @@ void UpdateTray() {
         if (d.r.online && d.r.percent < 0 && d.r.charge != Charge::Charging)
             it.tip += L"\nConectado, pero no informa su batería";
         else if (d.stale)
-            it.tip += L"\nÚltimo valor conocido (desconectado o en reposo)";
+            it.tip += L"\nÚltimo valor conocido (en reposo, no responde)";
         items.push_back(it);
     }
     // Several controllers: number them 1, 2, 3... (glyph badge + tooltip).
@@ -291,7 +295,7 @@ void ShowMenu(POINT pt) {
         if (d.r.online && (d.r.charge == Charge::Charging || d.r.charge == Charge::Full))
             text += std::wstring(L" · ") + ChargeName(d.r.charge);
         if (d.r.online && d.r.percent < 0 && d.r.charge != Charge::Charging) text += L" · sin dato de batería";
-        else if (d.stale) text += L" · sin conexión";
+        else if (d.stale) text += L" · en reposo";
         AppendMenuW(menu, MF_STRING, ID_DEVICE_FIRST + idx, text.c_str());
         g->menuIds.push_back(d.r.id);
         ++idx;
@@ -326,7 +330,7 @@ void ShowMenu(POINT pt) {
     AppendMenuW(config, MF_POPUP, (UINT_PTR)interval, L"Intervalo de actualización");
     AppendMenuW(config, MF_POPUP, (UINT_PTR)threshold, L"Umbral de batería baja");
     AppendMenuW(config, MF_STRING | (g->settings.hideDisconnected ? MF_CHECKED : 0), ID_HIDE_DISCONNECTED,
-                L"Ocultar dispositivos desconectados");
+                L"Ocultar dispositivos en reposo");
     AppendMenuW(config, MF_STRING | (g->settings.gameMode ? MF_CHECKED : 0), ID_GAME_MODE,
                 L"Ocultar durante juegos a pantalla completa");
     AppendMenuW(config,
@@ -560,7 +564,9 @@ int RunTrayApp(HINSTANCE inst) {
     }
 
     if (g->worker) {
-        WaitForSingleObject(g->worker, 3000);
+        // A poll still running uses `g`; never free it under the worker's feet.
+        // Icons are already removed, so a hard exit is safe if it does not finish.
+        if (WaitForSingleObject(g->worker, 5000) == WAIT_TIMEOUT) ExitProcess(0);
         CloseHandle(g->worker);
     }
     // Drain a result the worker may have posted after the window died.

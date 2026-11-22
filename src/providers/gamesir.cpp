@@ -48,7 +48,12 @@ bool ReadGameSir(HidDevice& dev, const HidModel& m, std::vector<BatteryReading>&
     b.id = Fmt(L"gamesir:%04x:%ls", info.pid, HidInstanceToken(info.path).c_str());
     if (const wchar_t* nm = GameSirName(info.pid, info.product)) b.name = nm;
     b.kind = DeviceKind::Gamepad;
+    // USB-cable identities of the pads (the dongles have their own PIDs).
+    static const uint16_t kWiredPids[] = {0x1053, 0x101D, 0x10B7, 0x10CB, 0x10CD, 0x10C5,
+                                          0x10C7, 0x10C9, 0x10FD, 0x1032, 0x1034};
     b.conn = Connection::Wireless24;
+    for (uint16_t p : kWiredPids)
+        if (info.pid == p) b.conn = Connection::Cable;
 
     uint8_t r[128] = {};
     if (info.usagePage == 0xFF7A) {  // Nova 2 Lite

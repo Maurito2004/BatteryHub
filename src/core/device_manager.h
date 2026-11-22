@@ -11,6 +11,7 @@ namespace bh {
 struct TrackedDevice {
     BatteryReading r;        // last good data; r.online reflects the latest poll
     bool stale = false;      // true when the percentage is not from the latest poll
+    bool present = false;    // seen in the latest poll at all (dongle plugged / BT connected)
     unsigned long long lastSeen = 0;  // GetTickCount64() of the last live reading
 };
 

@@ -64,7 +64,7 @@ int HidTransact(HidDevice& d, const uint8_t* req, size_t reqLen, uint8_t* resp, 
     }
     ULONGLONG deadline = GetTickCount64() + timeoutMs;
     while (GetTickCount64() < deadline) {
-        int n = d.Read(resp, respLen, (DWORD)(deadline - GetTickCount64()) + 1);
+        int n = d.Read(resp, respLen, MsLeft(deadline));
         if (n <= 0) break;
         if (::bh::g_verbose) ::bh::Out(L"      resp: %ls", HexBytes(resp, n < 40 ? n : 40).c_str());
         if (match(resp, n)) return n;

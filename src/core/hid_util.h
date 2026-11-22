@@ -58,4 +58,11 @@ private:
 
 std::wstring HexBytes(const uint8_t* p, size_t n);
 
+// Milliseconds left until `deadline` (GetTickCount64 time), at least 1. Never
+// underflows when the deadline has just passed (which would mean a ~49-day wait).
+inline DWORD MsLeft(ULONGLONG deadline) {
+    ULONGLONG now = GetTickCount64();
+    return now >= deadline ? 1 : (DWORD)(deadline - now);
+}
+
 }  // namespace bh

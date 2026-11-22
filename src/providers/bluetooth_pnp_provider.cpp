@@ -103,7 +103,9 @@ public:
             DLOG(L"  %-34ls battery=%3d%%  connected=%ls  started=%ls  CoD=0x%06X  container=%ls",
                  name.c_str(), a.battery, a.connected < 0 ? L"?" : (a.connected ? L"yes" : L"no"),
                  a.started ? L"yes" : L"no", a.cod, container.c_str());
-            if (a.battery < 0) continue;
+            // Paired but not connected: the stack keeps the last battery value, but the
+            // device is gone, so it is not reported (it would linger in the taskbar).
+            if (a.battery < 0 || !online) continue;
             DLOG(L"      battery node: %ls", a.batteryNode.c_str());
             BatteryReading r;
             r.id = L"bt:" + container;

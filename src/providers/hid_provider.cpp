@@ -138,7 +138,7 @@ int RunHidProbe(uint16_t vid, uint16_t pid, uint16_t usagePage, const std::vecto
         int reports = 0;
         uint8_t buf[512];
         while (GetTickCount64() < end) {
-            int n = dev.Read(buf, sizeof(buf), (DWORD)(end - GetTickCount64()) + 1);
+            int n = dev.Read(buf, sizeof(buf), MsLeft(end));
             if (n <= 0) break;
             Out(L"  in[%d]: %ls", n, HexBytes(buf, n < 64 ? n : 64).c_str());
             if (++reports >= 12) break;

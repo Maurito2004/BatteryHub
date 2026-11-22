@@ -37,7 +37,7 @@ public:
         ULONGLONG deadline = GetTickCount64() + kTimeoutMs;
         uint8_t r[64];
         while (GetTickCount64() < deadline) {
-            int n = d_.Read(r, sizeof(r), (DWORD)(deadline - GetTickCount64()) + 1);
+            int n = d_.Read(r, sizeof(r), MsLeft(deadline));
             if (n <= 0) break;
             if (n < 7 || (r[0] != 0x11 && r[0] != 0x10) || r[1] != idx_) continue;
             if ((r[2] == 0xFF || r[2] == 0x8F) && r[3] == feat) {  // HID++ 2.0 / 1.0 error

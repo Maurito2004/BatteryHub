@@ -59,8 +59,16 @@ falta compilar.
 **Clic en el widget de la barra (o en cualquier ícono del tray):** lista de dispositivos con tipo, alias, porcentaje,
 conexión (BT / 2.4 GHz / Cable) y estado de carga — clic en uno para renombrarlo —, *Actualizar ahora*,
 *Configuración* (mostrar en barra de tareas / área de notificación, intervalo, umbral de batería baja,
-ocultar desconectados, ocultar durante juegos, ocultar con el navegador a pantalla completa, iniciar con
+ocultar en reposo, ocultar durante juegos, ocultar con el navegador a pantalla completa, iniciar con
 Windows) y *Salir*.
+
+**Conectado, en reposo y desconectado:**
+- **Conectado:** porcentaje en vivo (rayo verde si está cargando o enchufado con carga completa).
+- **En reposo:** el dispositivo o su dongle siguen presentes pero no responden (un mouse o teclado
+  dormido): se muestra el último valor, atenuado. El último valor se guarda, así que aparece incluso
+  tras reiniciar la PC.
+- **Desconectado:** desapareció de Windows (mando apagado, cable o dongle quitados, Bluetooth fuera de
+  alcance): se quita de la barra hasta que vuelva.
 
 **Modo juego** (activado por defecto): cuando hay un juego o app a pantalla completa adelante — pantalla
 completa exclusiva (D3D), las que Windows marca como "ocupado", o una ventana sin bordes que cubre todo el
@@ -126,7 +134,8 @@ mismo dispositivo visto por PnP y por GATT aparece una sola vez.
 | Teclado AULA F75 / F75 Pro | 2.4 GHz, `3554:FA09` colección `FF02` de 20 bytes (`col01`) | **Verificado** (91 %). Dormido no responde → se muestra atenuado |
 | AULA F68 / F87 / F99 | 2.4 GHz, `3554:FA08/FA0A/FA10/FA11` | Mismo protocolo, sin verificar |
 | ATK 8K (Nordic nRF54, A9 Pro Max) | 2.4 GHz, `373B:*` colección `FF05/0001` | Sin verificar |
-| GameSir Cyclone 2 / G7 Pro (8K) | 2.4 GHz, `3537:*` colección `FFF0/0040` | Sin verificar (reporte `0x12`, bytes 35/36) |
+| GameSir Cyclone 2 por cable | USB, `3537:1053` colección `FFF0/0040` | **Verificado** (reporte `0x12`: byte 36 = %, byte 35 = cargando; 62→65 % cargando) |
+| GameSir Cyclone 2 por dongle / G7 Pro 8K | 2.4 GHz, `3537:100B` / `10C6`… colección `FFF0/0040` | Mismo protocolo, sin verificar por dongle |
 | GameSir G7 Pro Xbox (edición Wuchang) | 2.4 GHz, `3537:10A9` colección `FFF0/0040` | **Se detecta, sin batería**: se muestra como mando conectado con `--`. No responde a `0F 0B`, `0F 09` ni `0F F2 00`, y Windows.Gaming.Input solo devuelve un valor de relleno (1000/1000 mWh). GameSir Nexus lee la batería por un canal sin documentar |
 | GameSir Nova 2 Lite | 2.4 GHz, `3537:*` colección `FF7A` | Sin verificar (byte 19, `0xFF` = cargando) |
 | DualSense (PS5) | Bluetooth (`054C:0CE6`, reporte `0x31`, byte 54) | **Verificado** (95–100 %, descargando) |
@@ -193,3 +202,9 @@ HeadsetControl · PlayStation — driver `hid-playstation` de Linux.
 - **Bluetooth "conectado/desconectado"** se toma de la propiedad `{83DA6326-…},15` cuando existe y si no
   del estado del devnode; algunos stacks dejan la última batería publicada tras desconectar.
 - Windows.Gaming.Input no se usa (XInput cubre los mandos Xbox sin WinRT).
+
+## Versión
+
+**1.0.0** (22/11/2026) — primera versión completa. Verificado en hardware real sobre Windows 11:
+mouse ATK (Compx), teclado AULA F75, DualSense por Bluetooth y por cable, GameSir Cyclone 2 por cable.
+Windows 10, MSVC (`build.bat msvc`) y CMake están escritos pero todavía sin probar.
