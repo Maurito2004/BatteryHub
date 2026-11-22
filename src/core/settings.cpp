@@ -31,6 +31,7 @@ void Settings::Load() {
     hideDisconnected = ReadDword(HKEY_CURRENT_USER, kKey, L"HideDisconnected", 0) != 0;
     trayIcons = ReadDword(HKEY_CURRENT_USER, kKey, L"TrayIcons", 0) != 0;
     widgetLeft = ReadDword(HKEY_CURRENT_USER, kKey, L"WidgetLeft", 1) != 0;
+    gameMode = ReadDword(HKEY_CURRENT_USER, kKey, L"GameMode", 1) != 0;
 }
 
 void Settings::Save() const {
@@ -39,6 +40,7 @@ void Settings::Save() const {
     WriteDword(L"HideDisconnected", hideDisconnected ? 1 : 0);
     WriteDword(L"TrayIcons", trayIcons ? 1 : 0);
     WriteDword(L"WidgetLeft", widgetLeft ? 1 : 0);
+    WriteDword(L"GameMode", gameMode ? 1 : 0);
 }
 
 std::wstring GetAlias(const std::wstring& id) {

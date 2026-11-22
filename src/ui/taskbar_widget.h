@@ -29,6 +29,11 @@ public:
     // true = left end of the taskbar (default), false = next to the clock. If the
     // preferred side would overlap the Start button / app buttons, the other side is used.
     void SetAnchorLeft(bool left) { anchorLeft_ = left; lastRect_ = {}; }
+    // Game mode: hidden until the next Reposition()/Update().
+    void Hide() {
+        if (hwnd_) ShowWindow(hwnd_, SW_HIDE);
+        lastRect_ = {};
+    }
     // Re-anchors next to the notification area; false if the taskbar is gone or vertical.
     bool Reposition();
 

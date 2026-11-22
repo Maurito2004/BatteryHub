@@ -82,7 +82,7 @@ const HidModel kHidModels[] = {
     {0x054C, 0x05C4, 0x0001, 0x0005, -1, K::Gamepad, C::Unknown, L"DualShock 4", ReadPlayStation, false},
     {0x054C, 0x09CC, 0x0001, 0x0005, -1, K::Gamepad, C::Unknown, L"DualShock 4", ReadPlayStation, false},
     {0x054C, 0x0BA0, 0x0001, 0x0005, -1, K::Gamepad, C::Wireless24, L"DualShock 4 (USB adapter)", ReadPlayStation, false},
-    {0x054C, 0x0CE6, 0x0001, 0x0005, -1, K::Gamepad, C::Unknown, L"DualSense", ReadPlayStation, false},
+    {0x054C, 0x0CE6, 0x0001, 0x0005, -1, K::Gamepad, C::Unknown, L"DualSense", ReadPlayStation, true},
     {0x054C, 0x0DF2, 0x0001, 0x0005, -1, K::Gamepad, C::Unknown, L"DualSense Edge", ReadPlayStation, false},
 };
 

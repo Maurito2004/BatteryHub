@@ -40,6 +40,7 @@ enum : UINT {
     ID_MODE_TASKBAR,        // taskbar, left end
     ID_MODE_TASKBAR_CLOCK,  // taskbar, next to the clock
     ID_MODE_TRAY,
+    ID_GAME_MODE,
     ID_INTERVAL_FIRST = 2100,   // + index into kIntervals
     ID_THRESHOLD_FIRST = 2200,  // + index into kThresholds
 };
@@ -62,6 +63,8 @@ struct AppState {
     HANDLE worker = nullptr;
     bool polling = false;
     bool pollAgain = false;
+    bool gaming = false;  // full-screen game in front: hidden, not polling
+    int gameTicks = 0;    // consecutive 1 s checks that disagree with `gaming`
     std::vector<HDEVNOTIFY> notifications;
     std::vector<std::wstring> menuIds;  // device id per menu entry
 };
@@ -89,7 +92,29 @@ bool IsVisible(const TrackedDevice& d) {
     return d.r.percent >= 0 || d.r.online;
 }
 
+// Exclusive full-screen (D3D), "busy" full-screen apps, or a foreground window
+// covering its whole monitor (borderless-windowed games).
+bool IsFullscreenAppInFront() {
+    QUERY_USER_NOTIFICATION_STATE st;
+    if (SUCCEEDED(SHQueryUserNotificationState(&st)) &&
+        (st == QUNS_RUNNING_D3D_FULL_SCREEN || st == QUNS_BUSY || st == QUNS_PRESENTATION_MODE))
+        return true;
+    HWND fg = GetForegroundWindow();
+    if (!fg || fg == g->hwnd) return false;
+    wchar_t cls[64] = {};
+    GetClassNameW(fg, cls, 64);
+    for (const wchar_t* shell : {L"Progman", L"WorkerW", L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd"})
+        if (!wcscmp(cls, shell)) return false;
+    RECT wr;
+    MONITORINFO mi = {sizeof(mi)};
+    if (!GetWindowRect(fg, &wr) || !GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST), &mi))
+        return false;
+    return wr.left <= mi.rcMonitor.left && wr.top <= mi.rcMonitor.top && wr.right >= mi.rcMonitor.right &&
+           wr.bottom >= mi.rcMonitor.bottom;
+}
+
 void UpdateTray() {
+    if (g->gaming) return;  // game mode: stay hidden until the game is gone
     const bool light = IsTaskbarLight();
     const int size = TrayIconSize();
     std::vector<TrayItem> items;
@@ -165,6 +190,7 @@ DWORD WINAPI PollThread(void*) {
 }
 
 void StartPoll() {
+    if (g->gaming) return;  // no HID traffic while playing; polled again on exit
     if (g->polling) {
         g->pollAgain = true;
         return;
@@ -279,6 +305,8 @@ void ShowMenu(POINT pt) {
     AppendMenuW(config, MF_POPUP, (UINT_PTR)threshold, L"Umbral de batería baja");
     AppendMenuW(config, MF_STRING | (g->settings.hideDisconnected ? MF_CHECKED : 0), ID_HIDE_DISCONNECTED,
                 L"Ocultar dispositivos desconectados");
+    AppendMenuW(config, MF_STRING | (g->settings.gameMode ? MF_CHECKED : 0), ID_GAME_MODE,
+                L"Ocultar durante juegos a pantalla completa");
     AppendMenuW(config, MF_STRING | (IsAutostartEnabled() ? MF_CHECKED : 0), ID_AUTOSTART, L"Iniciar con Windows");
     AppendMenuW(menu, MF_POPUP, (UINT_PTR)config, L"Configuración");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -321,6 +349,9 @@ void OnCommand(UINT id) {
         if (id != ID_MODE_TRAY) g->settings.widgetLeft = id == ID_MODE_TASKBAR;
         g->settings.Save();
         UpdateTray();
+    } else if (id == ID_GAME_MODE) {
+        g->settings.gameMode = !g->settings.gameMode;
+        g->settings.Save();
     } else if (id == ID_HIDE_DISCONNECTED) {
         g->settings.hideDisconnected = !g->settings.hideDisconnected;
         g->settings.Save();
@@ -390,6 +421,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_TIMER:
             if (wp == TIMER_WIDGET) {
+                // Game mode: needs 2 s of agreement before switching, so alt-tab doesn't flicker.
+                bool full = g->settings.gameMode && IsFullscreenAppInFront();
+                g->gameTicks = full != g->gaming ? g->gameTicks + 1 : 0;
+                if (g->gameTicks >= 2) {
+                    g->gameTicks = 0;
+                    g->gaming = full;
+                    if (full) {
+                        KillTimer(hwnd, TIMER_POLL);
+                        g->widget.Hide();
+                        g->tray.RemoveAll();
+                    } else {
+                        RestartPollTimer();
+                        UpdateTray();
+                        StartPoll();
+                    }
+                    return 0;
+                }
+                if (g->gaming) return 0;
                 if (g->widget.Ok() && !g->widget.Reposition()) {
                     g->widget.Destroy();
                     UpdateTray();  // re-embed, or fall back to tray icons

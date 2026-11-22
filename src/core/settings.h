@@ -12,6 +12,7 @@ struct Settings {
     bool hideDisconnected = false;
     bool trayIcons = false;     // false = inline on the taskbar (default), true = notification-area icons
     bool widgetLeft = true;     // taskbar widget at the left end (default) or next to the clock
+    bool gameMode = true;       // hide + stop polling while a full-screen game/app is in front
 
     void Load();
     void Save() const;
