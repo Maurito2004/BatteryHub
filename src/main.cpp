@@ -10,14 +10,17 @@
 
 #include "core/log.h"
 #include "core/provider.h"
+#include "core/updater.h"
 #include "ui/app.h"
 #include "ui/icon_renderer.h"
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    bool dump = false, help = false;
+    bool dump = false, help = false, afterUpdate = false, update = false;
     for (int i = 1; argv && i < argc; ++i) {
+        if (!lstrcmpiW(argv[i], L"--after-update")) afterUpdate = true;
+        if (!lstrcmpiW(argv[i], L"--update")) update = true;
         if (!lstrcmpiW(argv[i], L"--preview") && i + 1 < argc) {  // dev aid: render sample icons
             bh::IconRendererInit();
             bool ok = bh::RenderPreviewPng(argv[i + 1]);
@@ -48,8 +51,30 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         bh::Out(L"  BatteryHub.exe --dump     Lista HID / Bluetooth / XInput con VID, PID, UsagePage,");
         bh::Out(L"                            Usage y el porcentaje leído (o el error)");
         bh::Out(L"  BatteryHub.exe --dump > dump.txt   Guarda el diagnóstico en un archivo (UTF-8)");
+        bh::Out(L"  BatteryHub.exe --update   Busca la última versión en GitHub y la instala");
+        return 0;
+    }
+    if (update) {  // command-line update (same code path as the menu)
+        bh::OpenConsoleForOutput();
+        bh::Out(L"BatteryHub %ls: buscando actualizaciones...", bh::CurrentVersion().c_str());
+        bh::UpdateInfo info = bh::CheckForUpdate();
+        if (!info.ok) {
+            bh::Out(L"No se pudo consultar GitHub: %ls", info.error.c_str());
+            return 1;
+        }
+        if (!info.newer) {
+            bh::Out(L"App actualizada: la última versión es %ls.", info.latest.c_str());
+            return 0;
+        }
+        bh::Out(L"Descargando %ls ...", info.latest.c_str());
+        std::wstring err;
+        if (!bh::InstallUpdate(info, &err)) {
+            bh::Out(L"Error: %ls", err.c_str());
+            return 1;
+        }
+        bh::Out(L"Listo: instalada la versión %ls.", info.latest.c_str());
         return 0;
     }
     if (dump) return bh::RunDump();
-    return bh::RunTrayApp(inst);
+    return bh::RunTrayApp(inst, afterUpdate);
 }

@@ -15,6 +15,7 @@
 #include "../core/device_manager.h"
 #include "../core/log.h"
 #include "../core/settings.h"
+#include "../core/updater.h"
 #include "icon_renderer.h"
 #include "taskbar_widget.h"
 #include "tray.h"
@@ -28,10 +29,13 @@ constexpr UINT WM_APP_POLL_DONE = WM_APP + 2;
 constexpr UINT WM_APP_WAKE = WM_APP + 3;  // sent by a second instance
 constexpr UINT WM_APP_WIDGET_MENU = WM_APP + 4;  // click on the taskbar widget (x, y)
 constexpr UINT WM_APP_REORDER = WM_APP + 5;      // user dragged a widget item to a new place
+constexpr UINT WM_APP_UPDATE_CHECKED = WM_APP + 6;  // lParam: UpdateInfo*, wParam: 1 = asked by the user
+constexpr UINT WM_APP_UPDATE_DONE = WM_APP + 7;     // wParam: success, lParam: std::wstring* error
 
 constexpr UINT_PTR TIMER_POLL = 1;
 constexpr UINT_PTR TIMER_DEBOUNCE = 2;
 constexpr UINT_PTR TIMER_WIDGET = 3;  // keeps the widget anchored next to the clock
+constexpr UINT_PTR TIMER_UPDATE = 4;  // background update check (30 s after start, then daily)
 
 enum : UINT {
     ID_DEVICE_FIRST = 1000,  // + device index: rename
@@ -45,6 +49,8 @@ enum : UINT {
     ID_GAME_MODE,
     ID_GAME_MODE_BROWSERS,
     ID_THEME_FIRST = 2050,      // + 0 auto, 1 dark, 2 light
+    ID_UPDATE_CHECK = 2300,
+    ID_UPDATE_INSTALL = 2301,
     ID_INTERVAL_FIRST = 2100,   // + index into kIntervals
     ID_THRESHOLD_FIRST = 2200,  // + index into kThresholds
 };
@@ -71,6 +77,8 @@ struct AppState {
     int gameTicks = 0;    // consecutive 1 s checks that disagree with `gaming`
     std::vector<HDEVNOTIFY> notifications;
     std::vector<std::wstring> menuIds;  // device id per menu entry
+    UpdateInfo update;                  // result of the last update check
+    bool updateChecking = false, updateInstalling = false;
 };
 AppState* g = nullptr;
 
@@ -300,6 +308,49 @@ void Rename(const std::wstring& id) {
 }
 
 // ---------------------------------------------------------------- context menu
+// ---------------------------------------------------------------- updates
+struct CheckJob {
+    HWND hwnd;
+    bool manual;
+};
+
+DWORD WINAPI UpdateCheckThread(void* p) {
+    CheckJob job = *(CheckJob*)p;
+    delete (CheckJob*)p;
+    auto* info = new UpdateInfo(CheckForUpdate());
+    if (!PostMessageW(job.hwnd, WM_APP_UPDATE_CHECKED, job.manual ? 1 : 0, (LPARAM)info)) delete info;
+    return 0;
+}
+
+void StartUpdateCheck(bool manual) {
+    if (g->updateChecking || g->updateInstalling) return;
+    g->updateChecking = true;
+    HANDLE t = CreateThread(nullptr, 0, UpdateCheckThread, new CheckJob{g->hwnd, manual}, 0, nullptr);
+    if (t) CloseHandle(t);
+    else g->updateChecking = false;
+}
+
+DWORD WINAPI UpdateInstallThread(void* p) {
+    HWND hwnd = (HWND)p;
+    UpdateInfo info = CheckForUpdate();  // fresh URL, in case a newer release appeared meanwhile
+    auto* err = new std::wstring;
+    bool ok = info.ok && info.newer && InstallUpdate(info, err);
+    if (info.ok && !info.newer) *err = L"ya tenés la última versión";
+    else if (!info.ok) *err = info.error;
+    if (!PostMessageW(hwnd, WM_APP_UPDATE_DONE, ok ? 1 : 0, (LPARAM)err)) delete err;
+    return 0;
+}
+
+void StartUpdateInstall() {
+    if (g->updateInstalling) return;
+    g->updateInstalling = true;
+    HANDLE t = CreateThread(nullptr, 0, UpdateInstallThread, g->hwnd, 0, nullptr);
+    if (t) CloseHandle(t);
+    else g->updateInstalling = false;
+}
+
+void OpenReleasesPage() { ShellExecuteW(nullptr, L"open", kReleasesPage, nullptr, nullptr, SW_SHOWNORMAL); }
+
 // Dark/light popup menus. uxtheme's SetPreferredAppMode (ordinal 135, Windows 10
 // 1903+) is undocumented but what Explorer and most tray apps use; FlushMenuThemes
 // (ordinal 136) makes the change apply to the next menu. No-op on older systems.
@@ -354,14 +405,17 @@ private:
 };
 
 // Icon-font glyphs (Segoe Fluent Icons / MDL2 Assets).
-constexpr const wchar_t* kGlyphRefresh = L"";
-constexpr const wchar_t* kGlyphSettings = L"";
-constexpr const wchar_t* kGlyphExit = L"";
-constexpr const wchar_t* kGlyphDisplay = L"";
-constexpr const wchar_t* kGlyphTimer = L"";
-constexpr const wchar_t* kGlyphBatteryLow = L"";
-constexpr const wchar_t* kGlyphTheme = L"";
-constexpr const wchar_t* kGlyphInfo = L"";
+constexpr const wchar_t* kGlyphRefresh = L"\uE72C";
+constexpr const wchar_t* kGlyphSettings = L"\uE713";
+constexpr const wchar_t* kGlyphExit = L"\uE7E8";
+constexpr const wchar_t* kGlyphDisplay = L"\uE7F4";
+constexpr const wchar_t* kGlyphTimer = L"\uE916";
+constexpr const wchar_t* kGlyphBatteryLow = L"\uE850";
+constexpr const wchar_t* kGlyphTheme = L"\uE790";
+constexpr const wchar_t* kGlyphInfo = L"\uE946";
+constexpr const wchar_t* kGlyphDownload = L"\uE896";
+constexpr const wchar_t* kGlyphCheck = L"\uE73E";
+constexpr const wchar_t* kGlyphSync = L"\uE895";
 
 void ShowMenu(POINT pt) {
     const bool dark = MenuIsDark();
@@ -448,7 +502,20 @@ void ShowMenu(POINT pt) {
     mb.Item(config, MF_STRING | (IsAutostartEnabled() ? MF_CHECKED : 0), ID_AUTOSTART, L"Iniciar con Windows");
     mb.Item(menu, MF_POPUP, (UINT_PTR)config, L"Configuración", kGlyphSettings);
     mb.Separator(menu);
-    mb.Item(menu, MF_STRING | MF_GRAYED, 0, L"BatteryHub " BH_VERSION_WSTR, nullptr);
+    // Update status, bottom of the menu.
+    if (g->updateInstalling) {
+        mb.Item(menu, MF_STRING | MF_GRAYED, 0, L"Descargando actualización…", kGlyphDownload);
+    } else if (g->update.ok && g->update.newer) {
+        mb.Item(menu, MF_STRING, ID_UPDATE_INSTALL, L"Actualizar a la versión " + g->update.latest, kGlyphDownload);
+    } else if (g->updateChecking) {
+        mb.Item(menu, MF_STRING | MF_GRAYED, 0, L"Buscando actualizaciones…", kGlyphSync);
+    } else if (g->update.ok) {
+        mb.Item(menu, MF_STRING, ID_UPDATE_CHECK, L"App actualizada (BatteryHub " + CurrentVersion() + L")",
+                kGlyphCheck);
+    } else {
+        mb.Item(menu, MF_STRING, ID_UPDATE_CHECK, L"Buscar actualizaciones (BatteryHub " + CurrentVersion() + L")",
+                kGlyphSync);
+    }
     mb.Item(menu, MF_STRING, ID_EXIT, L"Salir", kGlyphExit);
 
     SetForegroundWindow(g->hwnd);  // required so the menu closes when clicking elsewhere
@@ -463,6 +530,10 @@ void ShowMenu(POINT pt) {
 void OnCommand(UINT id) {
     if (id >= ID_DEVICE_FIRST && id < ID_DEVICE_FIRST + g->menuIds.size()) {
         Rename(g->menuIds[id - ID_DEVICE_FIRST]);
+    } else if (id == ID_UPDATE_CHECK) {
+        StartUpdateCheck(true);
+    } else if (id == ID_UPDATE_INSTALL) {
+        StartUpdateInstall();
     } else if (id == ID_REFRESH) {
         StartPoll();
     } else if (id >= ID_INTERVAL_FIRST && id < ID_INTERVAL_FIRST + ARRAYSIZE(kIntervals)) {
@@ -518,6 +589,45 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     switch (msg) {
+        case WM_APP_UPDATE_CHECKED: {
+            std::unique_ptr<UpdateInfo> info((UpdateInfo*)lp);
+            g->updateChecking = false;
+            if (info->ok || !g->update.ok) g->update = *info;  // keep a good result over a failed retry
+            if (wp) {  // the user asked: always answer
+                if (info->ok && info->newer) {
+                    if (MessageBoxW(hwnd,
+                                    (L"Hay una versión nueva: " + info->latest + L" (tenés " + CurrentVersion() +
+                                     L").\n\n¿Actualizar ahora? BatteryHub se reinicia solo.").c_str(),
+                                    L"BatteryHub", MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST) == IDYES)
+                        StartUpdateInstall();
+                } else if (info->ok) {
+                    MessageBoxW(hwnd, (L"App actualizada: tenés la última versión (" + CurrentVersion() + L").").c_str(),
+                                L"BatteryHub", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
+                } else if (MessageBoxW(hwnd,
+                                       (L"No se pudo buscar actualizaciones (" + info->error +
+                                        L").\n\n¿Abrir la página de descargas?").c_str(),
+                                       L"BatteryHub", MB_YESNO | MB_ICONWARNING | MB_TOPMOST) == IDYES) {
+                    OpenReleasesPage();
+                }
+            }
+            return 0;
+        }
+
+        case WM_APP_UPDATE_DONE: {
+            std::unique_ptr<std::wstring> err((std::wstring*)lp);
+            g->updateInstalling = false;
+            if (wp && StartUpdatedApp()) {
+                DestroyWindow(hwnd);  // the new version takes over once this instance is gone
+                return 0;
+            }
+            if (MessageBoxW(hwnd,
+                            (L"No se pudo actualizar automáticamente (" + *err +
+                             L").\n\n¿Abrir la página de descargas para bajarla a mano?").c_str(),
+                            L"BatteryHub", MB_YESNO | MB_ICONWARNING | MB_TOPMOST) == IDYES)
+                OpenReleasesPage();
+            return 0;
+        }
+
         case WM_APP_REORDER: {
             // New order = what the widget shows now, then remembered ids not shown at the moment.
             std::vector<std::wstring> order;
@@ -568,6 +678,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
 
         case WM_TIMER:
+            if (wp == TIMER_UPDATE) {
+                SetTimer(hwnd, TIMER_UPDATE, 24u * 60 * 60 * 1000, nullptr);  // then once a day
+                StartUpdateCheck(false);
+                return 0;
+            }
             if (wp == TIMER_WIDGET) {
                 // Game mode: needs 2 s of agreement before switching, so alt-tab doesn't flicker.
                 bool full = g->settings.gameMode && IsFullscreenAppInFront();
@@ -626,6 +741,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             KillTimer(hwnd, TIMER_POLL);
             KillTimer(hwnd, TIMER_DEBOUNCE);
             KillTimer(hwnd, TIMER_WIDGET);
+            KillTimer(hwnd, TIMER_UPDATE);
             for (auto n : g->notifications) UnregisterDeviceNotification(n);
             g->widget.Destroy();
             g->tray.RemoveAll();
@@ -637,8 +753,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 }  // namespace
 
-int RunTrayApp(HINSTANCE inst) {
+int RunTrayApp(HINSTANCE inst, bool afterUpdate) {
     HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\BatteryHub.SingleInstance");
+    if (GetLastError() == ERROR_ALREADY_EXISTS && afterUpdate && mutex) {
+        // Started by the updater: wait for the old version to exit and take over.
+        DWORD w = WaitForSingleObject(mutex, 15000);
+        if (w == WAIT_OBJECT_0 || w == WAIT_ABANDONED) SetLastError(0);
+    }
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND other = FindWindowW(kWindowClass, nullptr);
         if (other) PostMessageW(other, WM_APP_WAKE, 0, 0);  // just refresh the running one
@@ -672,6 +793,8 @@ int RunTrayApp(HINSTANCE inst) {
     StartPoll();
     RestartPollTimer();
     SetTimer(g->hwnd, TIMER_WIDGET, 1000, nullptr);
+    SetTimer(g->hwnd, TIMER_UPDATE, 30 * 1000, nullptr);  // first check shortly after start
+    DeleteOldBinary();                                     // leftover of a previous update
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {

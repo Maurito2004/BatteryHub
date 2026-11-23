@@ -14,6 +14,7 @@ add_executable(BatteryHub WIN32
   src/core/settings.cpp
   src/core/hid_util.cpp
   src/core/device_manager.cpp
+  src/core/updater.cpp
   src/providers/bluetooth_pnp_provider.cpp
   src/providers/ble_gatt_provider.cpp
   src/providers/xinput_provider.cpp
@@ -37,7 +38,7 @@ target_compile_definitions(BatteryHub PRIVATE UNICODE _UNICODE
 target_include_directories(BatteryHub PRIVATE assets)
 # xinput1_4.dll is loaded at runtime (no import), so it is not linked here.
 target_link_libraries(BatteryHub PRIVATE
-  hid setupapi comctl32 cfgmgr32 bluetoothapis gdiplus shell32 user32 gdi32 advapi32 ole32)
+  hid setupapi comctl32 winhttp cfgmgr32 bluetoothapis gdiplus shell32 user32 gdi32 advapi32 ole32)
 
 if(MSVC)
   set_property(TARGET BatteryHub PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")  # static CRT: portable exe

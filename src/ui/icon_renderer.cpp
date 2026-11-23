@@ -25,13 +25,13 @@ std::unique_ptr<FontFamily> g_iconFamily;
 std::unique_ptr<FontFamily> g_textFamily;
 
 const wchar_t* GlyphFor(DeviceKind k, bool placeholder) {
-    if (placeholder) return L"";  // Battery
+    if (placeholder) return L"\uE83F";  // Battery
     switch (k) {
-        case DeviceKind::Headset:  return L"";  // Headphone
-        case DeviceKind::Mouse:    return L"";  // Mouse
-        case DeviceKind::Keyboard: return L"";  // KeyboardClassic
-        case DeviceKind::Gamepad:  return L"";  // Game
-        default:                   return L"";  // Devices
+        case DeviceKind::Headset:  return L"\uE7F6";  // Headphone
+        case DeviceKind::Mouse:    return L"\uE962";  // Mouse
+        case DeviceKind::Keyboard: return L"\uE765";  // KeyboardClassic
+        case DeviceKind::Gamepad:  return L"\uE7FC";  // Game
+        default:                   return L"\uE772";  // Devices
     }
 }
 
@@ -100,7 +100,7 @@ HICON RenderTrayIcon(const IconSpec& s) {
             DrawFitted(g, GlyphFor(s.kind, s.placeholder), glyph, brush, RectF(0, 0, S * 0.62f, topH));
             Font bolt(g_iconFamily.get(), topH * 0.9f, FontStyleRegular, UnitPixel);
             SolidBrush boltBrush(s.stale ? ink : (s.light ? Color(255, 16, 124, 16) : Color(255, 108, 203, 95)));
-            DrawFitted(g, L"", bolt, boltBrush, RectF(S * 0.56f, 0, S * 0.44f, topH));
+            DrawFitted(g, L"\uE945", bolt, boltBrush, RectF(S * 0.56f, 0, S * 0.44f, topH));
         } else {
             DrawFitted(g, GlyphFor(s.kind, s.placeholder), glyph, brush, RectF(0, 0, (REAL)S, topH));
         }
@@ -259,8 +259,8 @@ HBITMAP RenderTaskbarStrip(const std::vector<IconSpec>& items, int height, int d
             if ((s.charge == Charge::Charging || s.charge == Charge::Full) && !s.stale) {  // on power
                 SolidBrush green(s.light ? Color(255, 16, 124, 16) : Color(255, 108, 203, 95));
                 RectF bb;
-                g.MeasureString(L"", -1, bolt.get(), PointF(0, 0), &fmt, &bb);
-                g.DrawString(L"", -1, bolt.get(),
+                g.MeasureString(L"\uE945", -1, bolt.get(), PointF(0, 0), &fmt, &bb);
+                g.DrawString(L"\uE945", -1, bolt.get(),
                              PointF(gx + glyphPx - bb.Width * 0.55f, height / 2.0f + glyphPx * 0.5f - bb.Height),
                              &fmt, &green);
             }

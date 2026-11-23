@@ -8,6 +8,8 @@ tareas de Windows, sin G Hub, Synapse, iCUE ni SteelSeries GG.
 **[Última versión → BatteryHub.exe](https://github.com/Maurito2004/BatteryHub/releases/latest)** (sección
 *Releases* a la derecha del repo). Un solo archivo: descargalo, ejecutalo y activá *Configuración →
 Iniciar con Windows*. No necesita instalación ni permisos de administrador.
+Desde la 1.2.0 se **actualiza sola**: abajo de todo del menú aparece *"Actualizar a la versión X"* cuando
+hay una nueva (o *"App actualizada"* si ya tenés la última).
 
 > **Compatibilidad:** probado solo en **Windows 11** (build 26300, barra con apps centradas).
 > En **Windows 10** todavía no se probó: el código usa APIs disponibles desde Windows 10 y el
@@ -221,6 +223,9 @@ HeadsetControl · PlayStation — driver `hid-playstation` de Linux.
 - Windows.Gaming.Input no se usa (XInput cubre los mandos Xbox sin WinRT).
 
 ## Versiones
+
+**1.2.0** (23/11/2026) — actualizaciones desde el menú: avisa cuando hay versión nueva, la descarga,
+reemplaza el `.exe` y se reinicia sola (`--update` desde consola).
 
 **1.1.1** (23/11/2026) — ancho fijo por porcentaje (sin temblor en la barra) y sin redibujar si nada
 cambió.

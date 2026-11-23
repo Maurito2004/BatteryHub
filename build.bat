@@ -8,13 +8,13 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 set SRC=src\main.cpp src\core\device.cpp src\core\log.cpp src\core\settings.cpp src\core\hid_util.cpp ^
- src\core\device_manager.cpp src\providers\bluetooth_pnp_provider.cpp src\providers\ble_gatt_provider.cpp ^
+ src\core\device_manager.cpp src\core\updater.cpp src\providers\bluetooth_pnp_provider.cpp src\providers\ble_gatt_provider.cpp ^
  src\providers\xinput_provider.cpp src\providers\hid_provider.cpp src\providers\hid_models.cpp ^
  src\providers\logitech_hidpp.cpp src\providers\razer.cpp src\providers\headsets.cpp ^
  src\providers\playstation.cpp src\providers\compx.cpp src\providers\gamesir.cpp ^
  src\ui\icon_renderer.cpp src\ui\tray.cpp src\ui\taskbar_widget.cpp src\ui\app.cpp
 
-set LIBS_COMMON=hid setupapi comctl32 cfgmgr32 bluetoothapis gdiplus shell32 user32 gdi32 advapi32 ole32
+set LIBS_COMMON=hid setupapi comctl32 winhttp cfgmgr32 bluetoothapis gdiplus shell32 user32 gdi32 advapi32 ole32
 if not exist build mkdir build
 
 set MODE=%1
