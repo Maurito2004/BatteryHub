@@ -1,0 +1,52 @@
+# Builds BatteryHub on GitHub's Windows servers and publishes a Release with the
+# ready-to-use exe every time a version tag (v1.2.3) is pushed.
+#   git tag -a v1.2.0 -m "..." && git push origin v1.2.0
+# Release notes are read from docs/release-notes/<tag>.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: # manual build (artifact only, no release)
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM-MinGW (same toolchain used locally)
+        shell: pwsh
+        run: |
+          $v = "20261117"
+          Invoke-WebRequest "https://github.com/mstorsjo/llvm-mingw/releases/download/$v/llvm-mingw-$v-ucrt-x86_64.zip" -OutFile llvm.zip
+          Expand-Archive llvm.zip -DestinationPath C:\llvm
+          "C:\llvm\llvm-mingw-$v-ucrt-x86_64\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Build
+        shell: cmd
+        run: build.bat mingw
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item dist -ItemType Directory | Out-Null
+          Copy-Item build\BatteryHub.exe dist\BatteryHub.exe
+          Compress-Archive -Path build\BatteryHub.exe, README.md -DestinationPath "dist\BatteryHub-${{ github.ref_name }}-portable.zip"
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BatteryHub-${{ github.ref_name }}
+          path: dist/*
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: BatteryHub ${{ github.ref_name }}
+          body_path: docs/release-notes/${{ github.ref_name }}.md
+          files: dist/*

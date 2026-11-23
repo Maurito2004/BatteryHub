@@ -14,6 +14,8 @@ struct Settings {
     bool widgetLeft = true;     // taskbar widget at the left end (default) or next to the clock
     bool gameMode = true;       // hide + stop polling while a full-screen game/app is in front
     bool gameModeBrowsers = false;  // also when a browser (video) is full screen
+    int menuTheme = 0;          // 0 = follow Windows, 1 = dark, 2 = light
+    std::vector<std::wstring> order;  // device ids in the order the user dragged them
 
     void Load();
     void Save() const;

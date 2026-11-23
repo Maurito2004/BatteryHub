@@ -33,6 +33,16 @@ void Settings::Load() {
     widgetLeft = ReadDword(HKEY_CURRENT_USER, kKey, L"WidgetLeft", 1) != 0;
     gameMode = ReadDword(HKEY_CURRENT_USER, kKey, L"GameMode", 1) != 0;
     gameModeBrowsers = ReadDword(HKEY_CURRENT_USER, kKey, L"GameModeBrowsers", 0) != 0;
+    menuTheme = Clamp((int)ReadDword(HKEY_CURRENT_USER, kKey, L"MenuTheme", 0), 0, 2);
+    order.clear();
+    DWORD size = 0;
+    if (RegGetValueW(HKEY_CURRENT_USER, kKey, L"Order", RRF_RT_REG_MULTI_SZ, nullptr, nullptr, &size) ==
+            ERROR_SUCCESS && size > 0) {
+        std::vector<wchar_t> buf(size / sizeof(wchar_t) + 2, 0);
+        if (RegGetValueW(HKEY_CURRENT_USER, kKey, L"Order", RRF_RT_REG_MULTI_SZ, nullptr, buf.data(), &size) ==
+            ERROR_SUCCESS)
+            for (const wchar_t* p = buf.data(); *p; p += wcslen(p) + 1) order.push_back(p);
+    }
 }
 
 void Settings::Save() const {
@@ -43,6 +53,12 @@ void Settings::Save() const {
     WriteDword(L"WidgetLeft", widgetLeft ? 1 : 0);
     WriteDword(L"GameMode", gameMode ? 1 : 0);
     WriteDword(L"GameModeBrowsers", gameModeBrowsers ? 1 : 0);
+    WriteDword(L"MenuTheme", (DWORD)menuTheme);
+    std::wstring multi;  // REG_MULTI_SZ: "id1\0id2\0\0"
+    for (const auto& id : order) multi += id + L'\0';
+    multi += L'\0';
+    RegSetKeyValueW(HKEY_CURRENT_USER, kKey, L"Order", REG_MULTI_SZ, multi.data(),
+                    (DWORD)(multi.size() * sizeof(wchar_t)));
 }
 
 std::wstring GetAlias(const std::wstring& id) {

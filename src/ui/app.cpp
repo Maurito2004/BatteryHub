@@ -7,6 +7,7 @@
 #include <dbt.h>
 #include <shellapi.h>
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -26,6 +27,7 @@ constexpr UINT WM_APP_TRAY = WM_APP + 1;
 constexpr UINT WM_APP_POLL_DONE = WM_APP + 2;
 constexpr UINT WM_APP_WAKE = WM_APP + 3;  // sent by a second instance
 constexpr UINT WM_APP_WIDGET_MENU = WM_APP + 4;  // click on the taskbar widget (x, y)
+constexpr UINT WM_APP_REORDER = WM_APP + 5;      // user dragged a widget item to a new place
 
 constexpr UINT_PTR TIMER_POLL = 1;
 constexpr UINT_PTR TIMER_DEBOUNCE = 2;
@@ -42,6 +44,7 @@ enum : UINT {
     ID_MODE_TRAY,
     ID_GAME_MODE,
     ID_GAME_MODE_BROWSERS,
+    ID_THEME_FIRST = 2050,      // + 0 auto, 1 dark, 2 light
     ID_INTERVAL_FIRST = 2100,   // + index into kIntervals
     ID_THRESHOLD_FIRST = 2200,  // + index into kThresholds
 };
@@ -171,6 +174,16 @@ void UpdateTray() {
             it.tip += L"\nÚltimo valor conocido (en reposo, no responde)";
         items.push_back(it);
     }
+    // User-defined order (drag & drop); devices never dragged keep arrival order at the end.
+    auto rank = [](const std::wstring& id) {
+        const auto& o = g->settings.order;
+        for (size_t i = 0; i < o.size(); ++i)
+            if (o[i] == id) return (int)i;
+        return 1 << 20;
+    };
+    std::stable_sort(items.begin(), items.end(),
+                     [&](const TrayItem& a, const TrayItem& b) { return rank(a.id) < rank(b.id); });
+
     // Several controllers: number them 1, 2, 3... (glyph badge + tooltip).
     int pads = 0;
     for (const auto& it : items) pads += it.spec.kind == DeviceKind::Gamepad;
@@ -196,7 +209,7 @@ void UpdateTray() {
     // Inline taskbar display unless the user chose tray icons or the taskbar
     // layout does not allow it (vertical taskbar, unknown shell) -> tray fallback.
     if (!g->settings.trayIcons) {
-        if (!g->widget.Ok()) g->widget.Create(g->inst, g->hwnd, WM_APP_WIDGET_MENU);
+        if (!g->widget.Ok()) g->widget.Create(g->inst, g->hwnd, WM_APP_WIDGET_MENU, WM_APP_REORDER);
         if (g->widget.Ok()) {
             g->widget.SetAnchorLeft(g->settings.widgetLeft);
             std::vector<WidgetItem> w;
@@ -287,81 +300,163 @@ void Rename(const std::wstring& id) {
 }
 
 // ---------------------------------------------------------------- context menu
+// Dark/light popup menus. uxtheme's SetPreferredAppMode (ordinal 135, Windows 10
+// 1903+) is undocumented but what Explorer and most tray apps use; FlushMenuThemes
+// (ordinal 136) makes the change apply to the next menu. No-op on older systems.
+bool MenuIsDark() {
+    if (g->settings.menuTheme == 1) return true;
+    if (g->settings.menuTheme == 2) return false;
+    DWORD light = 1, size = sizeof(light);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                 L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
+    return light == 0;
+}
+
+void ApplyMenuTheme(bool dark) {
+    static HMODULE ux = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!ux) return;
+    using SetModeFn = int(WINAPI*)(int);
+    using FlushFn = void(WINAPI*)();
+    static auto setMode = (SetModeFn)(void*)GetProcAddress(ux, MAKEINTRESOURCEA(135));
+    static auto flush = (FlushFn)(void*)GetProcAddress(ux, MAKEINTRESOURCEA(136));
+    if (setMode) setMode(dark ? 2 /*ForceDark*/ : 3 /*ForceLight*/);
+    if (flush) flush();
+}
+
+// Builds menus with an icon-font glyph per item; owns the icon bitmaps.
+class MenuBuilder {
+public:
+    explicit MenuBuilder(bool dark) : dark_(dark) {
+        HDC dc = GetDC(nullptr);
+        size_ = MulDiv(16, GetDeviceCaps(dc, LOGPIXELSX), 96);
+        ReleaseDC(nullptr, dc);
+    }
+    ~MenuBuilder() {
+        for (HBITMAP b : bitmaps_) DeleteObject(b);
+    }
+    void Item(HMENU m, UINT flags, UINT_PTR id, const std::wstring& text, const wchar_t* glyph = nullptr) {
+        AppendMenuW(m, flags, id, text.c_str());
+        if (!glyph) return;
+        HBITMAP b = RenderMenuGlyph(glyph, size_, dark_);
+        if (!b) return;
+        bitmaps_.push_back(b);
+        MENUITEMINFOW mi = {sizeof(mi)};
+        mi.fMask = MIIM_BITMAP;
+        mi.hbmpItem = b;
+        SetMenuItemInfoW(m, GetMenuItemCount(m) - 1, TRUE, &mi);
+    }
+    void Separator(HMENU m) { AppendMenuW(m, MF_SEPARATOR, 0, nullptr); }
+
+private:
+    bool dark_;
+    int size_ = 16;
+    std::vector<HBITMAP> bitmaps_;
+};
+
+// Icon-font glyphs (Segoe Fluent Icons / MDL2 Assets).
+constexpr const wchar_t* kGlyphRefresh = L"";
+constexpr const wchar_t* kGlyphSettings = L"";
+constexpr const wchar_t* kGlyphExit = L"";
+constexpr const wchar_t* kGlyphDisplay = L"";
+constexpr const wchar_t* kGlyphTimer = L"";
+constexpr const wchar_t* kGlyphBatteryLow = L"";
+constexpr const wchar_t* kGlyphTheme = L"";
+constexpr const wchar_t* kGlyphInfo = L"";
+
 void ShowMenu(POINT pt) {
+    const bool dark = MenuIsDark();
+    ApplyMenuTheme(dark);
+    MenuBuilder mb(dark);
     HMENU menu = CreatePopupMenu();
     g->menuIds.clear();
 
+    // Devices, in the same order as the taskbar.
+    std::vector<const TrackedDevice*> shown;
+    for (const auto& d : g->devices.Devices())
+        if (IsVisible(d)) shown.push_back(&d);
+    auto rank = [](const std::wstring& id) {
+        const auto& o = g->settings.order;
+        for (size_t i = 0; i < o.size(); ++i)
+            if (o[i] == id) return (int)i;
+        return 1 << 20;
+    };
+    std::stable_sort(shown.begin(), shown.end(),
+                     [&](const TrackedDevice* a, const TrackedDevice* b) { return rank(a->r.id) < rank(b->r.id); });
+
     UINT idx = 0;
-    for (const auto& d : g->devices.Devices()) {
-        if (!IsVisible(d)) continue;
+    for (const TrackedDevice* dp : shown) {
+        const TrackedDevice& d = *dp;
         std::wstring pct = d.r.percent >= 0 ? Fmt(L"%d%%", d.r.percent) : std::wstring(L"--");
-        std::wstring text = std::wstring(KindName(d.r.kind)) + L": " + DisplayName(d.r) + L"\t" + pct + L" · " +
-                            ConnName(d.r.conn);
+        std::wstring text = DisplayName(d.r) + L"\t" + pct + L" · " + ConnName(d.r.conn);
         if (d.r.online && (d.r.charge == Charge::Charging || d.r.charge == Charge::Full))
             text += std::wstring(L" · ") + ChargeName(d.r.charge);
-        if (d.r.online && d.r.percent < 0 && d.r.charge != Charge::Charging) text += L" · sin dato de batería";
+        if (d.r.online && d.r.percent < 0 && d.r.charge != Charge::Charging) text += L" · sin dato";
         else if (d.stale) text += L" · en reposo";
-        AppendMenuW(menu, MF_STRING, ID_DEVICE_FIRST + idx, text.c_str());
+        mb.Item(menu, MF_STRING, ID_DEVICE_FIRST + idx, text, DeviceGlyph(d.r.kind));
         g->menuIds.push_back(d.r.id);
         ++idx;
     }
-    if (idx == 0) AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, L"No se detectaron dispositivos con batería");
-    else AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, L"(clic en un dispositivo para renombrarlo)");
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, ID_REFRESH, L"Actualizar ahora");
+    if (idx == 0) mb.Item(menu, MF_STRING | MF_GRAYED, 0, L"No se detectaron dispositivos", kGlyphInfo);
+    else mb.Item(menu, MF_STRING | MF_GRAYED, 0, L"Clic: renombrar · Arrastrar en la barra: mover", kGlyphInfo);
+    mb.Separator(menu);
+    mb.Item(menu, MF_STRING, ID_REFRESH, L"Actualizar ahora", kGlyphRefresh);
+
+    HMENU mode = CreatePopupMenu();
+    mb.Item(mode, MF_STRING, ID_MODE_TASKBAR, L"Barra de tareas, a la izquierda");
+    mb.Item(mode, MF_STRING, ID_MODE_TASKBAR_CLOCK, L"Barra de tareas, junto al reloj");
+    mb.Item(mode, MF_STRING, ID_MODE_TRAY, L"Área de notificación (un ícono por dispositivo)");
+    UINT current = g->settings.trayIcons ? ID_MODE_TRAY
+                 : g->settings.widgetLeft ? ID_MODE_TASKBAR : ID_MODE_TASKBAR_CLOCK;
+    CheckMenuRadioItem(mode, ID_MODE_TASKBAR, ID_MODE_TRAY, current, MF_BYCOMMAND);
 
     HMENU interval = CreatePopupMenu();
     for (UINT i = 0; i < ARRAYSIZE(kIntervals); ++i) {
         int s = kIntervals[i];
-        std::wstring label = s < 60 ? Fmt(L"%d segundos", s) : Fmt(L"%d minuto%ls", s / 60, s >= 120 ? L"s" : L"");
-        AppendMenuW(interval, MF_STRING | (g->settings.intervalSec == s ? MF_CHECKED : 0), ID_INTERVAL_FIRST + i,
-                    label.c_str());
+        mb.Item(interval, MF_STRING, ID_INTERVAL_FIRST + i,
+                s < 60 ? Fmt(L"%d segundos", s) : Fmt(L"%d minuto%ls", s / 60, s >= 120 ? L"s" : L""));
+        if (g->settings.intervalSec == s)
+            CheckMenuRadioItem(interval, ID_INTERVAL_FIRST, ID_INTERVAL_FIRST + ARRAYSIZE(kIntervals) - 1,
+                               ID_INTERVAL_FIRST + i, MF_BYCOMMAND);
     }
     HMENU threshold = CreatePopupMenu();
     for (UINT i = 0; i < ARRAYSIZE(kThresholds); ++i) {
-        int t = kThresholds[i];
-        AppendMenuW(threshold, MF_STRING | (g->settings.lowThreshold == t ? MF_CHECKED : 0), ID_THRESHOLD_FIRST + i,
-                    Fmt(L"%d %%", t).c_str());
-    }
-    HMENU mode = CreatePopupMenu();
-    AppendMenuW(mode, MF_STRING, ID_MODE_TASKBAR, L"Barra de tareas, a la izquierda");
-    AppendMenuW(mode, MF_STRING, ID_MODE_TASKBAR_CLOCK, L"Barra de tareas, junto al reloj");
-    AppendMenuW(mode, MF_STRING, ID_MODE_TRAY, L"Área de notificación (un ícono por dispositivo)");
-    UINT current = g->settings.trayIcons ? ID_MODE_TRAY
-                 : g->settings.widgetLeft ? ID_MODE_TASKBAR : ID_MODE_TASKBAR_CLOCK;
-    CheckMenuRadioItem(mode, ID_MODE_TASKBAR, ID_MODE_TRAY, current, MF_BYCOMMAND);
-    HMENU config = CreatePopupMenu();
-    AppendMenuW(config, MF_POPUP, (UINT_PTR)mode, L"Mostrar en");
-    AppendMenuW(config, MF_POPUP, (UINT_PTR)interval, L"Intervalo de actualización");
-    AppendMenuW(config, MF_POPUP, (UINT_PTR)threshold, L"Umbral de batería baja");
-    AppendMenuW(config, MF_STRING | (g->settings.hideDisconnected ? MF_CHECKED : 0), ID_HIDE_DISCONNECTED,
-                L"Ocultar dispositivos en reposo");
-    AppendMenuW(config, MF_STRING | (g->settings.gameMode ? MF_CHECKED : 0), ID_GAME_MODE,
-                L"Ocultar durante juegos a pantalla completa");
-    AppendMenuW(config,
-                MF_STRING | (g->settings.gameModeBrowsers ? MF_CHECKED : 0) | (g->settings.gameMode ? 0 : MF_GRAYED),
-                ID_GAME_MODE_BROWSERS, L"Ocultar también con el navegador a pantalla completa");
-    AppendMenuW(config, MF_STRING | (IsAutostartEnabled() ? MF_CHECKED : 0), ID_AUTOSTART, L"Iniciar con Windows");
-    AppendMenuW(menu, MF_POPUP, (UINT_PTR)config, L"Configuración");
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, ID_EXIT, L"Salir");
-
-    // Radio-style marks for the two single-choice submenus.
-    for (UINT i = 0; i < ARRAYSIZE(kIntervals); ++i)
-        if (g->settings.intervalSec == kIntervals[i])
-            CheckMenuRadioItem(interval, ID_INTERVAL_FIRST, ID_INTERVAL_FIRST + ARRAYSIZE(kIntervals) - 1,
-                               ID_INTERVAL_FIRST + i, MF_BYCOMMAND);
-    for (UINT i = 0; i < ARRAYSIZE(kThresholds); ++i)
+        mb.Item(threshold, MF_STRING, ID_THRESHOLD_FIRST + i, Fmt(L"%d %%", kThresholds[i]));
         if (g->settings.lowThreshold == kThresholds[i])
             CheckMenuRadioItem(threshold, ID_THRESHOLD_FIRST, ID_THRESHOLD_FIRST + ARRAYSIZE(kThresholds) - 1,
                                ID_THRESHOLD_FIRST + i, MF_BYCOMMAND);
+    }
+    HMENU theme = CreatePopupMenu();
+    mb.Item(theme, MF_STRING, ID_THEME_FIRST + 0, L"Igual que Windows");
+    mb.Item(theme, MF_STRING, ID_THEME_FIRST + 1, L"Oscuro");
+    mb.Item(theme, MF_STRING, ID_THEME_FIRST + 2, L"Claro");
+    CheckMenuRadioItem(theme, ID_THEME_FIRST, ID_THEME_FIRST + 2, ID_THEME_FIRST + g->settings.menuTheme,
+                       MF_BYCOMMAND);
+
+    HMENU config = CreatePopupMenu();
+    mb.Item(config, MF_POPUP, (UINT_PTR)mode, L"Mostrar en", kGlyphDisplay);
+    mb.Item(config, MF_POPUP, (UINT_PTR)interval, L"Intervalo de actualización", kGlyphTimer);
+    mb.Item(config, MF_POPUP, (UINT_PTR)threshold, L"Umbral de batería baja", kGlyphBatteryLow);
+    mb.Item(config, MF_POPUP, (UINT_PTR)theme, L"Tema del menú", kGlyphTheme);
+    mb.Separator(config);
+    mb.Item(config, MF_STRING | (g->settings.hideDisconnected ? MF_CHECKED : 0), ID_HIDE_DISCONNECTED,
+            L"Ocultar dispositivos en reposo");
+    mb.Item(config, MF_STRING | (g->settings.gameMode ? MF_CHECKED : 0), ID_GAME_MODE,
+            L"Ocultar durante juegos a pantalla completa");
+    mb.Item(config,
+            MF_STRING | (g->settings.gameModeBrowsers ? MF_CHECKED : 0) | (g->settings.gameMode ? 0 : MF_GRAYED),
+            ID_GAME_MODE_BROWSERS, L"Ocultar también con el navegador a pantalla completa");
+    mb.Item(config, MF_STRING | (IsAutostartEnabled() ? MF_CHECKED : 0), ID_AUTOSTART, L"Iniciar con Windows");
+    mb.Item(menu, MF_POPUP, (UINT_PTR)config, L"Configuración", kGlyphSettings);
+    mb.Separator(menu);
+    mb.Item(menu, MF_STRING | MF_GRAYED, 0, L"BatteryHub " BH_VERSION_WSTR, nullptr);
+    mb.Item(menu, MF_STRING, ID_EXIT, L"Salir", kGlyphExit);
 
     SetForegroundWindow(g->hwnd);  // required so the menu closes when clicking elsewhere
     UINT flags = TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY;
     flags |= GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN;
     UINT cmd = (UINT)TrackPopupMenuEx(menu, flags | TPM_BOTTOMALIGN, pt.x, pt.y, g->hwnd, nullptr);
     PostMessageW(g->hwnd, WM_NULL, 0, 0);
-    DestroyMenu(menu);  // destroys submenus too
+    DestroyMenu(menu);  // destroys submenus too; MenuBuilder frees the icons
     if (cmd) SendMessageW(g->hwnd, WM_COMMAND, cmd, 0);
 }
 
@@ -383,6 +478,9 @@ void OnCommand(UINT id) {
         if (id != ID_MODE_TRAY) g->settings.widgetLeft = id == ID_MODE_TASKBAR;
         g->settings.Save();
         UpdateTray();
+    } else if (id >= ID_THEME_FIRST && id <= ID_THEME_FIRST + 2) {
+        g->settings.menuTheme = (int)(id - ID_THEME_FIRST);
+        g->settings.Save();
     } else if (id == ID_GAME_MODE) {
         g->settings.gameMode = !g->settings.gameMode;
         g->settings.Save();
@@ -420,6 +518,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     switch (msg) {
+        case WM_APP_REORDER: {
+            // New order = what the widget shows now, then remembered ids not shown at the moment.
+            std::vector<std::wstring> order;
+            for (const auto& id : g->widget.Order())
+                if (id != L"__none__") order.push_back(id);
+            for (const auto& id : g->settings.order)
+                if (std::find(order.begin(), order.end(), id) == order.end()) order.push_back(id);
+            g->settings.order = order;
+            g->settings.Save();
+            UpdateTray();
+            return 0;
+        }
+
         case WM_APP_WIDGET_MENU: {
             POINT pt = {(int)(INT_PTR)wp, (int)(INT_PTR)lp};
             ShowMenu(pt);

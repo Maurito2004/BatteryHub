@@ -3,6 +3,12 @@
 Batería de tus periféricos inalámbricos (auriculares, mouse, teclado, joysticks) en la barra de
 tareas de Windows, sin G Hub, Synapse, iCUE ni SteelSeries GG.
 
+## ⬇️ Descargar
+
+**[Última versión → BatteryHub.exe](https://github.com/Maurito2004/BatteryHub/releases/latest)** (sección
+*Releases* a la derecha del repo). Un solo archivo: descargalo, ejecutalo y activá *Configuración →
+Iniciar con Windows*. No necesita instalación ni permisos de administrador.
+
 > **Compatibilidad:** probado solo en **Windows 11** (build 26300, barra con apps centradas).
 > En **Windows 10** todavía no se probó: el código usa APIs disponibles desde Windows 10 y el
 > widget de la barra busca la misma estructura (`Shell_TrayWnd` / `TrayNotifyWnd`), pero no está
@@ -53,8 +59,19 @@ carga en tiempo de ejecución (`xinput1_4.dll`), así que el exe arranca aunque 
 | `BatteryHub.exe --preview out.png` | (desarrollo) renderiza todos los estados de ícono |
 | `BatteryHub.exe --probe VID PID PAGE [bytes hex]` | (desarrollo) abre esa colección HID, opcionalmente escribe un reporte de salida y muestra todo lo que llega durante 2 s. Ej.: `--probe 3537 10A9 FFF0 0F 0B` |
 
-El ejecutable listo para usar está en [`release/BatteryHub.exe`](release/BatteryHub.exe): no hace
-falta compilar.
+El ejecutable listo para usar está en [Releases](https://github.com/Maurito2004/BatteryHub/releases/latest)
+(y también en [`release/BatteryHub.exe`](release/BatteryHub.exe)): no hace falta compilar.
+
+**Publicar una versión nueva:** subí el número en `assets/resource.h`, escribí las notas en
+`docs/release-notes/vX.Y.Z.md` y empujá la etiqueta (`git tag -a vX.Y.Z -m "..." && git push origin
+vX.Y.Z`). GitHub Actions ([`.github/workflows/release.yml`](.github/workflows/release.yml)) compila en
+Windows y publica el Release con el `.exe` y un `.zip` portable.
+
+**Reordenar:** mantené apretado un dispositivo del widget y arrastralo a otro lugar; el orden se
+guarda (`HKCU\Software\BatteryHub\Order`) y también se usa en el menú y en el modo tray.
+
+**Menú oscuro / claro:** *Configuración → Tema del menú* (igual que Windows, oscuro o claro), con íconos
+de Segoe Fluent en cada opción.
 
 **Clic en el widget de la barra (o en cualquier ícono del tray):** lista de dispositivos con tipo, alias, porcentaje,
 conexión (BT / 2.4 GHz / Cable) y estado de carga — clic en uno para renombrarlo —, *Actualizar ahora*,
@@ -203,7 +220,10 @@ HeadsetControl · PlayStation — driver `hid-playstation` de Linux.
   del estado del devnode; algunos stacks dejan la última batería publicada tras desconectar.
 - Windows.Gaming.Input no se usa (XInput cubre los mandos Xbox sin WinRT).
 
-## Versión
+## Versiones
+
+**1.1.0** (22/11/2026) — reordenar arrastrando, menú oscuro/claro con íconos, modo juego sin falsos
+positivos con ventanas maximizadas, releases automáticos con el `.exe`.
 
 **1.0.0** (22/11/2026) — primera versión completa. Verificado en hardware real sobre Windows 11:
 mouse ATK (Compx), teclado AULA F75, DualSense por Bluetooth y por cable, GameSir Cyclone 2 por cable.

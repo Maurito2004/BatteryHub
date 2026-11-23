@@ -20,8 +20,10 @@ struct WidgetItem {
 
 class TaskbarWidget {
 public:
-    // menuMsg is posted to `owner` with (x, y) screen coords on any click.
-    bool Create(HINSTANCE inst, HWND owner, UINT menuMsg);
+    // menuMsg is posted to `owner` with (x, y) screen coords on a click; reorderMsg
+    // after the user dragged an item to a new place (read the result with Order()).
+    bool Create(HINSTANCE inst, HWND owner, UINT menuMsg, UINT reorderMsg);
+    std::vector<std::wstring> Order() const;
     void Destroy();
     bool Ok() const { return hwnd_ != nullptr; }
 
@@ -41,9 +43,13 @@ private:
     static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
     void Render();
     void RebuildTooltips();
+    int HitIndex(int x) const;
+    void OnMouse(UINT msg, int x);
 
     HWND hwnd_ = nullptr, taskbar_ = nullptr, tooltip_ = nullptr, owner_ = nullptr;
-    UINT menuMsg_ = 0;
+    UINT menuMsg_ = 0, reorderMsg_ = 0;
+    int pressIndex_ = -1, pressX_ = 0;  // drag state
+    bool dragging_ = false;
     std::vector<WidgetItem> items_;
     std::vector<int> itemRight_;
     int width_ = 0, height_ = 0, dpi_ = 96;

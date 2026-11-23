@@ -2,6 +2,8 @@
 
 #include <commctrl.h>
 
+#include <cstdlib>
+
 #ifdef _MSC_VER
 #pragma comment(lib, "comctl32.lib")
 #endif
@@ -22,9 +24,10 @@ int DpiOf(HWND hwnd) {
 }
 }  // namespace
 
-bool TaskbarWidget::Create(HINSTANCE inst, HWND owner, UINT menuMsg) {
+bool TaskbarWidget::Create(HINSTANCE inst, HWND owner, UINT menuMsg, UINT reorderMsg) {
     owner_ = owner;
     menuMsg_ = menuMsg;
+    reorderMsg_ = reorderMsg;
     taskbar_ = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!taskbar_ || !FindWindowExW(taskbar_, nullptr, L"TrayNotifyWnd", nullptr)) return false;
 
@@ -64,8 +67,66 @@ void TaskbarWidget::Destroy() {
     items_.clear();
 }
 
+std::vector<std::wstring> TaskbarWidget::Order() const {
+    std::vector<std::wstring> ids;
+    for (const auto& it : items_) ids.push_back(it.id);
+    return ids;
+}
+
+int TaskbarWidget::HitIndex(int x) const {
+    for (size_t i = 0; i < itemRight_.size(); ++i)
+        if (x < itemRight_[i]) return (int)i;
+    return itemRight_.empty() ? -1 : (int)itemRight_.size() - 1;
+}
+
+// Press-and-drag reorders the items live; a press released without moving is a click.
+void TaskbarWidget::OnMouse(UINT msg, int x) {
+    if (msg == WM_LBUTTONDOWN) {
+        pressIndex_ = HitIndex(x);
+        pressX_ = x;
+        dragging_ = false;
+        SetCapture(hwnd_);
+        return;
+    }
+    if (msg == WM_MOUSEMOVE) {
+        if (pressIndex_ < 0 || GetCapture() != hwnd_) return;
+        if (!dragging_ && abs(x - pressX_) >= GetSystemMetrics(SM_CXDRAG)) {
+            dragging_ = true;
+            items_[pressIndex_].spec.highlight = true;
+            Render();
+        }
+        if (!dragging_) return;
+        int target = HitIndex(x);
+        if (target >= 0 && target != pressIndex_) {
+            WidgetItem moved = items_[pressIndex_];
+            items_.erase(items_.begin() + pressIndex_);
+            items_.insert(items_.begin() + target, moved);
+            pressIndex_ = target;
+            Render();
+        }
+        return;
+    }
+    if (msg == WM_LBUTTONUP || msg == WM_CAPTURECHANGED) {
+        bool wasDrag = dragging_, wasPress = pressIndex_ >= 0;
+        if (pressIndex_ >= 0 && pressIndex_ < (int)items_.size()) items_[pressIndex_].spec.highlight = false;
+        pressIndex_ = -1;
+        dragging_ = false;
+        if (msg == WM_LBUTTONUP && GetCapture() == hwnd_) ReleaseCapture();
+        if (wasDrag) {
+            Render();
+            RebuildTooltips();
+            PostMessageW(owner_, reorderMsg_, 0, 0);
+        } else if (wasPress && msg == WM_LBUTTONUP) {
+            POINT pt;
+            GetCursorPos(&pt);
+            PostMessageW(owner_, menuMsg_, (WPARAM)pt.x, (LPARAM)pt.y);
+        }
+    }
+}
+
 void TaskbarWidget::Update(const std::vector<WidgetItem>& items) {
     if (!hwnd_) return;
+    if (dragging_) return;  // don't reshuffle under the user's finger; next refresh applies
     items_ = items;
     dpi_ = DpiOf(taskbar_);
     RECT tb;
@@ -169,7 +230,12 @@ LRESULT CALLBACK TaskbarWidget::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     switch (msg) {
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
+        case WM_LBUTTONDOWN:
+        case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
+        case WM_CAPTURECHANGED:
+            if (self) self->OnMouse(msg, (short)LOWORD(lp));
+            return 0;
         case WM_RBUTTONUP:
             if (self) {
                 POINT pt;

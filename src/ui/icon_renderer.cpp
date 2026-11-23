@@ -177,6 +177,20 @@ HBITMAP ToPremultipliedDib(Bitmap& bmp, int w, int h) {
 
 }  // namespace
 
+const wchar_t* DeviceGlyph(DeviceKind kind) { return GlyphFor(kind, false); }
+
+HBITMAP RenderMenuGlyph(const wchar_t* glyph, int size, bool darkMenu) {
+    if (!g_iconFamily || size < 8) return nullptr;
+    Bitmap bmp(size, size, PixelFormat32bppPARGB);
+    Graphics g(&bmp);
+    g.Clear(Color(0, 0, 0, 0));
+    g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+    Font font(g_iconFamily.get(), size * 0.86f, FontStyleRegular, UnitPixel);
+    SolidBrush ink(darkMenu ? Color(255, 255, 255, 255) : Color(255, 32, 32, 32));
+    DrawFitted(g, glyph, font, ink, RectF(0, 0, (REAL)size, (REAL)size));
+    return ToPremultipliedDib(bmp, size, size);
+}
+
 HBITMAP RenderTaskbarStrip(const std::vector<IconSpec>& items, int height, int dpi, int* outWidth,
                            std::vector<int>* itemRight) {
     const REAL k = dpi / 96.0f;
@@ -223,6 +237,17 @@ HBITMAP RenderTaskbarStrip(const std::vector<IconSpec>& items, int height, int d
         const IconSpec& s = items[i];
         SolidBrush ink(InkFor(s));
         REAL gx = x + padX;
+        if (s.highlight) {  // item being dragged: subtle rounded plate behind it
+            SolidBrush plate(s.light ? Color(40, 0, 0, 0) : Color(48, 255, 255, 255));
+            REAL px = x + 2 * k, py = height * 0.14f, pw = widths[i] - 4 * k, ph = height * 0.72f, rr = 5 * k;
+            GraphicsPath path;
+            path.AddArc(px, py, 2 * rr, 2 * rr, 180, 90);
+            path.AddArc(px + pw - 2 * rr, py, 2 * rr, 2 * rr, 270, 90);
+            path.AddArc(px + pw - 2 * rr, py + ph - 2 * rr, 2 * rr, 2 * rr, 0, 90);
+            path.AddArc(px, py + ph - 2 * rr, 2 * rr, 2 * rr, 90, 90);
+            path.CloseFigure();
+            g.FillPath(&plate, &path);
+        }
         if (glyph) {
             RectF gb;
             g.MeasureString(GlyphFor(s.kind, s.placeholder), -1, glyph.get(), PointF(0, 0), &fmt, &gb);

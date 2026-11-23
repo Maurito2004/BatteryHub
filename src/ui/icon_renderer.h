@@ -18,9 +18,11 @@ struct IconSpec {
     bool placeholder = false;  // "no devices" icon
     int size = 16;             // pixels (small icon metric at the taskbar DPI)
     int badge = 0;             // 1, 2, 3... next to the glyph when several controllers are shown
+    bool highlight = false;    // taskbar strip: item being dragged
 
     bool operator==(const IconSpec& o) const {
         return kind == o.kind && percent == o.percent && charge == o.charge && stale == o.stale && badge == o.badge &&
+               highlight == o.highlight &&
                low == o.low && light == o.light && placeholder == o.placeholder && size == o.size;
     }
     bool operator!=(const IconSpec& o) const { return !(*this == o); }
@@ -34,6 +36,13 @@ bool RenderPreviewPng(const wchar_t* path);  // dev aid: --preview <file.png>
 // Taskbar strip: "[glyph] 93%" per item, laid out left to right, `height` px tall.
 // Returns a premultiplied 32-bpp top-down DIB (for UpdateLayeredWindow), its width,
 // and the right edge of every item (for hit-testing / tooltips).
+// Segoe Fluent / MDL2 glyph for a device type.
+const wchar_t* DeviceGlyph(DeviceKind kind);
+
+// Menu item icon: one icon-font glyph, `size` px, white (dark menu) or black.
+// Premultiplied 32-bpp bitmap for MENUITEMINFO::hbmpItem; caller deletes it.
+HBITMAP RenderMenuGlyph(const wchar_t* glyph, int size, bool darkMenu);
+
 HBITMAP RenderTaskbarStrip(const std::vector<IconSpec>& items, int height, int dpi, int* outWidth,
                            std::vector<int>* itemRight);
 
