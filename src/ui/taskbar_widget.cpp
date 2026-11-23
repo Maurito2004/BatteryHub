@@ -127,11 +127,20 @@ void TaskbarWidget::OnMouse(UINT msg, int x) {
 void TaskbarWidget::Update(const std::vector<WidgetItem>& items) {
     if (!hwnd_) return;
     if (dragging_) return;  // don't reshuffle under the user's finger; next refresh applies
-    items_ = items;
-    dpi_ = DpiOf(taskbar_);
+    int dpi = DpiOf(taskbar_);
     RECT tb;
     GetWindowRect(taskbar_, &tb);
-    height_ = tb.bottom - tb.top;
+    int height = tb.bottom - tb.top;
+    // Nothing visible changed (same devices, values, theme, size): skip the GDI+
+    // redraw and the tooltip rebuild — the latter would also close a tooltip the
+    // user is reading. Still re-anchor, in case the taskbar moved.
+    if (items == items_ && dpi == dpi_ && height == height_ && width_ > 0) {
+        Reposition();
+        return;
+    }
+    items_ = items;
+    dpi_ = dpi;
+    height_ = height;
     Render();
     lastRect_ = {};  // force re-anchoring (width may have changed)
     Reposition();

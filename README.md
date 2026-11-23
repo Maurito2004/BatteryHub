@@ -222,9 +222,19 @@ HeadsetControl · PlayStation — driver `hid-playstation` de Linux.
 
 ## Versiones
 
+**1.1.1** (23/11/2026) — ancho fijo por porcentaje (sin temblor en la barra) y sin redibujar si nada
+cambió.
+
 **1.1.0** (22/11/2026) — reordenar arrastrando, menú oscuro/claro con íconos, modo juego sin falsos
 positivos con ventanas maximizadas, releases automáticos con el `.exe`.
 
 **1.0.0** (22/11/2026) — primera versión completa. Verificado en hardware real sobre Windows 11:
 mouse ATK (Compx), teclado AULA F75, DualSense por Bluetooth y por cable, GameSir Cyclone 2 por cable.
 Windows 10, MSVC (`build.bat msvc`) y CMake están escritos pero todavía sin probar.
+
+## Planes a futuro
+
+- **Linux** (prioridad) y eventualmente **macOS**. La lógica de protocolos (los lectores HID de
+  `src/providers/`) es portable en concepto, pero hoy usa APIs de Windows (SetupAPI, hid.dll,
+  Shell_NotifyIcon, GDI+). Habría que separar una capa de plataforma: `hidraw`/`hidapi` y UPower/BlueZ
+  en Linux, y un indicador de bandeja (StatusNotifierItem / AppIndicator) en lugar del widget.

@@ -211,11 +211,14 @@ HBITMAP RenderTaskbarStrip(const std::vector<IconSpec>& items, int height, int d
     std::vector<std::wstring> labels;
     std::vector<REAL> widths;
     REAL total = 0;
+    // Every label gets the width of the widest one ("100%"), so the strip does not
+    // shift sideways when a value changes length (100% -> 99%, 9% -> 10%, "--").
+    // The number stays next to its glyph; the reserved space is at the end.
+    RectF widest;
+    pg.MeasureString(L"100%", -1, &text, PointF(0, 0), &fmt, &widest);
     for (const auto& s : items) {
         std::wstring label = (s.placeholder || s.percent < 0) ? L"--" : Fmt(L"%d%%", s.percent > 100 ? 100 : s.percent);
-        RectF b;
-        pg.MeasureString(label.c_str(), -1, &text, PointF(0, 0), &fmt, &b);
-        REAL w = padX + glyphPx + (s.badge ? badgeW : 0) + gap + b.Width + padX;
+        REAL w = padX + glyphPx + (s.badge ? badgeW : 0) + gap + widest.Width + padX;
         labels.push_back(label);
         widths.push_back(w);
         total += w;

@@ -16,6 +16,9 @@ struct WidgetItem {
     std::wstring id;
     IconSpec spec;
     std::wstring tip;
+
+    bool operator==(const WidgetItem& o) const { return id == o.id && spec == o.spec && tip == o.tip; }
+    bool operator!=(const WidgetItem& o) const { return !(*this == o); }
 };
 
 class TaskbarWidget {
