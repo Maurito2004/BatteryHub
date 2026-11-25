@@ -1,7 +1,12 @@
 # Builds BatteryHub on GitHub's Windows servers and publishes a Release with the
 # ready-to-use exe every time a version tag (v1.2.3) is pushed.
-#   git tag -a v1.2.0 -m "..." && git push origin v1.2.0
+#   git tag -a v1.3.0 -m "..." && git push origin v1.3.0
 # Release notes are read from docs/release-notes/<tag>.md.
+#
+# Code signing (SignPath Foundation): the exe is signed by SignPath when the
+# repository variable SIGNPATH_ORGANIZATION_ID and the secret SIGNPATH_API_TOKEN
+# exist. Until then the step is skipped and the release ships unsigned, as before.
+# Setup: docs/signpath/README.md
 name: Release
 
 on:
@@ -11,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  actions: read # SignPath downloads the unsigned artifact from this run
 
 jobs:
   build:
@@ -30,12 +36,41 @@ jobs:
         shell: cmd
         run: build.bat mingw
 
+      # The artifact SignPath signs: a zip holding BatteryHub.exe at its root
+      # (see docs/signpath/artifact-configuration.xml).
+      - name: Upload unsigned exe
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: BatteryHub-unsigned
+          path: build/BatteryHub.exe
+          if-no-files-found: error
+
+      - name: Sign with SignPath
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'BatteryHub' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Use the signed exe
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        shell: pwsh
+        run: |
+          Copy-Item signed\BatteryHub.exe build\BatteryHub.exe -Force
+          Get-AuthenticodeSignature build\BatteryHub.exe | Format-List Status, SignerCertificate
+
       - name: Package
         shell: pwsh
         run: |
           New-Item dist -ItemType Directory | Out-Null
           Copy-Item build\BatteryHub.exe dist\BatteryHub.exe
-          Compress-Archive -Path build\BatteryHub.exe, README.md -DestinationPath "dist\BatteryHub-${{ github.ref_name }}-portable.zip"
+          Compress-Archive -Path build\BatteryHub.exe, README.md, LICENSE -DestinationPath "dist\BatteryHub-${{ github.ref_name }}-portable.zip"
           Get-ChildItem dist | Format-Table Name, Length
 
       - uses: actions/upload-artifact@v4

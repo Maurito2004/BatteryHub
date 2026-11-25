@@ -6,8 +6,8 @@ tareas de Windows, sin G Hub, Synapse, iCUE ni SteelSeries GG.
 ## ⬇️ Descargar
 
 **[Última versión → BatteryHub.exe](https://github.com/Maurito2004/BatteryHub/releases/latest)** (sección
-*Releases* a la derecha del repo). Un solo archivo: descargalo, ejecutalo y activá *Configuración →
-Iniciar con Windows*. No necesita instalación ni permisos de administrador.
+*Releases* a la derecha del repo). Un solo archivo: descargalo, ejecutalo y activá *Configuración… →
+General → Iniciar con Windows*. No necesita instalación ni permisos de administrador.
 Desde la 1.2.0 se **actualiza sola**: abajo de todo del menú aparece *"Actualizar a la versión X"* cuando
 hay una nueva (o *"App actualizada"* si ya tenés la última).
 
@@ -16,6 +16,9 @@ hay una nueva (o *"App actualizada"* si ya tenés la última).
 > widget de la barra busca la misma estructura (`Shell_TrayWnd` / `TrayNotifyWnd`), pero no está
 > verificado. Si algo falla ahí, el modo "área de notificación" del menú es la alternativa.
 
+- **Ventana de Configuración** (clic en la barra → *Configuración…*): tus dispositivos con su barra de carga,
+  renombrar y ordenar, dónde se muestran, tema, intervalo, umbral de batería baja con un deslizador,
+  modo juego, inicio con Windows y actualizaciones. Se dibuja con Direct2D y solo existe mientras está abierta.
 - **C++17 + Win32 + GDI+**, sin runtime, sin servicio, sin admin. Un solo `.exe` portable (~330 KB).
 - ~3 MB de memoria privada en reposo.
 - **En la barra de tareas** (por defecto): `[ícono] XX%` por dispositivo, al lado izquierdo del reloj,
@@ -48,7 +51,7 @@ cmake --build build-cmake
 Sin compilador: `winget install MartinStorsjo.LLVM-MinGW.UCRT` (por usuario, sin admin). `build.bat` lo
 encuentra aunque no esté en el `PATH`.
 
-Librerías: `hid`, `setupapi`, `cfgmgr32`, `bluetoothapis`, `gdiplus` (+ las básicas de Win32). XInput se
+Librerías: `hid`, `setupapi`, `cfgmgr32`, `bluetoothapis`, `gdiplus`, `d2d1`, `dwrite` (+ las básicas de Win32). XInput se
 carga en tiempo de ejecución (`xinput1_4.dll`), así que el exe arranca aunque falte.
 
 ## Uso
@@ -243,3 +246,21 @@ Windows 10, MSVC (`build.bat msvc`) y CMake están escritos pero todavía sin pr
   `src/providers/`) es portable en concepto, pero hoy usa APIs de Windows (SetupAPI, hid.dll,
   Shell_NotifyIcon, GDI+). Habría que separar una capa de plataforma: `hidraw`/`hidapi` y UPower/BlueZ
   en Linux, y un indicador de bandeja (StatusNotifierItem / AppIndicator) en lugar del widget.
+
+## Firma de código
+
+Política de firma de código: las versiones publicadas en *Releases* se compilan en GitHub Actions a partir
+de este repositorio y, una vez aprobado el proyecto, se firman con el servicio gratuito
+[SignPath.io](https://about.signpath.io), con un certificado de
+[SignPath Foundation](https://signpath.org).
+
+- Autor y aprobador de las firmas: [Maurito2004](https://github.com/Maurito2004).
+- Solo se firma lo que sale de este repositorio a través del workflow `release.yml`; nada compilado a mano.
+- Privacidad: BatteryHub no envía datos a ningún lado. La única conexión que hace es consultar la última
+  versión en la API pública de GitHub (`api.github.com`) para avisar de actualizaciones.
+
+Cómo se configura: [docs/signpath/README.md](docs/signpath/README.md).
+
+## Licencia
+
+[MIT](LICENSE).

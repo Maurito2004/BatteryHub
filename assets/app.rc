@@ -32,9 +32,11 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
+            VALUE "CompanyName", "Maurito2004 (github.com/Maurito2004/BatteryHub)"
             VALUE "FileDescription", "BatteryHub - wireless peripheral battery in the taskbar"
             VALUE "FileVersion", BH_VERSION_STR
             VALUE "InternalName", "BatteryHub"
+            VALUE "LegalCopyright", "Copyright (c) 2026 Maurito2004. MIT License."
             VALUE "OriginalFilename", "BatteryHub.exe"
             VALUE "ProductName", "BatteryHub"
             VALUE "ProductVersion", BH_VERSION_STR

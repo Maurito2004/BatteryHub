@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration for BatteryHub.
+     GitHub Actions uploads build/BatteryHub.exe as an artifact, which arrives at
+     SignPath as a zip with the exe at its root. Paste this into the project's
+     artifact configuration on signpath.io. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="BatteryHub.exe" product-name="BatteryHub" product-version="1.*">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

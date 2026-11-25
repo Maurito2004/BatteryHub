@@ -17,6 +17,7 @@
 #include "../core/settings.h"
 #include "../core/updater.h"
 #include "icon_renderer.h"
+#include "settings_window.h"
 #include "taskbar_widget.h"
 #include "tray.h"
 
@@ -40,22 +41,11 @@ constexpr UINT_PTR TIMER_UPDATE = 4;  // background update check (30 s after sta
 enum : UINT {
     ID_DEVICE_FIRST = 1000,  // + device index: rename
     ID_REFRESH = 2000,
-    ID_HIDE_DISCONNECTED,
-    ID_AUTOSTART,
+    ID_SETTINGS,
     ID_EXIT,
-    ID_MODE_TASKBAR,        // taskbar, left end
-    ID_MODE_TASKBAR_CLOCK,  // taskbar, next to the clock
-    ID_MODE_TRAY,
-    ID_GAME_MODE,
-    ID_GAME_MODE_BROWSERS,
-    ID_THEME_FIRST = 2050,      // + 0 auto, 1 dark, 2 light
     ID_UPDATE_CHECK = 2300,
     ID_UPDATE_INSTALL = 2301,
-    ID_INTERVAL_FIRST = 2100,   // + index into kIntervals
-    ID_THRESHOLD_FIRST = 2200,  // + index into kThresholds
 };
-const int kIntervals[] = {30, 60, 120, 300, 600};
-const int kThresholds[] = {5, 10, 15, 20, 25, 30};
 
 // GUIDs for interface arrival notifications.
 const GUID kHidInterface = {0x4D1E55B2, 0xF16F, 0x11CF, {0x88, 0xCB, 0x00, 0x11, 0x11, 0x00, 0x00, 0x30}};
@@ -79,6 +69,7 @@ struct AppState {
     std::vector<std::wstring> menuIds;  // device id per menu entry
     UpdateInfo update;                  // result of the last update check
     bool updateChecking = false, updateInstalling = false;
+    bool updateChecked = false;         // at least one check finished (for the settings window)
 };
 AppState* g = nullptr;
 
@@ -155,6 +146,24 @@ bool IsFullscreenAppInFront() {
            wr.bottom >= mi.rcMonitor.bottom;
 }
 
+int OrderRank(const std::wstring& id) {
+    const auto& o = g->settings.order;
+    for (size_t i = 0; i < o.size(); ++i)
+        if (o[i] == id) return (int)i;
+    return 1 << 20;
+}
+
+// Visible devices in the user's order (the taskbar, the menu and the settings window agree).
+std::vector<const TrackedDevice*> ShownDevices() {
+    std::vector<const TrackedDevice*> shown;
+    for (const auto& d : g->devices.Devices())
+        if (IsVisible(d)) shown.push_back(&d);
+    std::stable_sort(shown.begin(), shown.end(), [](const TrackedDevice* a, const TrackedDevice* b) {
+        return OrderRank(a->r.id) < OrderRank(b->r.id);
+    });
+    return shown;
+}
+
 void UpdateTray() {
     if (g->gaming) return;  // game mode: stay hidden until the game is gone
     const bool light = IsTaskbarLight();
@@ -183,14 +192,8 @@ void UpdateTray() {
         items.push_back(it);
     }
     // User-defined order (drag & drop); devices never dragged keep arrival order at the end.
-    auto rank = [](const std::wstring& id) {
-        const auto& o = g->settings.order;
-        for (size_t i = 0; i < o.size(); ++i)
-            if (o[i] == id) return (int)i;
-        return 1 << 20;
-    };
     std::stable_sort(items.begin(), items.end(),
-                     [&](const TrayItem& a, const TrayItem& b) { return rank(a.id) < rank(b.id); });
+                     [](const TrayItem& a, const TrayItem& b) { return OrderRank(a.id) < OrderRank(b.id); });
 
     // Several controllers: number them 1, 2, 3... (glyph badge + tooltip).
     int pads = 0;
@@ -301,10 +304,30 @@ void Rename(const std::wstring& id) {
     for (const auto& d : g->devices.Devices()) {
         if (d.r.id != id) continue;
         RenameCtx ctx{id, d.r.name.empty() ? KindName(d.r.kind) : d.r.name, DisplayName(d.r)};
-        if (DialogBoxParamW(g->inst, MAKEINTRESOURCEW(IDD_RENAME), g->hwnd, RenameProc, (LPARAM)&ctx) == IDOK)
+        // Over the settings window when it is open, so it stays modal to it.
+        HWND owner = SettingsWindowHandle() ? SettingsWindowHandle() : g->hwnd;
+        if (DialogBoxParamW(g->inst, MAKEINTRESOURCEW(IDD_RENAME), owner, RenameProc, (LPARAM)&ctx) == IDOK) {
             UpdateTray();
+            RefreshSettingsWindow();
+        }
         return;
     }
+}
+
+// Moves a device one place earlier/later among the visible ones.
+void MoveDevice(const std::wstring& id, int delta) {
+    std::vector<std::wstring> ids;
+    for (const TrackedDevice* d : ShownDevices()) ids.push_back(d->r.id);
+    auto it = std::find(ids.begin(), ids.end(), id);
+    if (it == ids.end()) return;
+    size_t i = (size_t)(it - ids.begin());
+    if ((delta < 0 && i == 0) || (delta > 0 && i + 1 >= ids.size())) return;
+    std::swap(ids[i], ids[delta < 0 ? i - 1 : i + 1]);
+    for (const auto& old : g->settings.order)  // remembered devices not shown right now keep their place at the end
+        if (std::find(ids.begin(), ids.end(), old) == ids.end()) ids.push_back(old);
+    g->settings.order = ids;
+    g->settings.Save();
+    UpdateTray();
 }
 
 // ---------------------------------------------------------------- context menu
@@ -350,6 +373,72 @@ void StartUpdateInstall() {
 }
 
 void OpenReleasesPage() { ShellExecuteW(nullptr, L"open", kReleasesPage, nullptr, nullptr, SW_SHOWNORMAL); }
+
+// ---------------------------------------------------------------- settings window
+class AppSettingsHost : public SettingsHost {
+public:
+    Settings& Prefs() override { return g->settings; }
+
+    std::vector<DeviceView> Devices() override {
+        std::vector<DeviceView> out;
+        for (const TrackedDevice* dp : ShownDevices()) {
+            const TrackedDevice& d = *dp;
+            DeviceView v;
+            v.id = d.r.id;
+            v.name = DisplayName(d.r);
+            v.kind = d.r.kind;
+            v.percent = d.r.percent;
+            v.stale = d.stale;
+            v.charging = d.r.online && d.r.charge == Charge::Charging;
+            v.detail = ConnName(d.r.conn);
+            if (d.r.online && (d.r.charge == Charge::Charging || d.r.charge == Charge::Full))
+                v.detail += std::wstring(L" · ") + ChargeName(d.r.charge);
+            if (d.r.online && d.r.percent < 0 && d.r.charge != Charge::Charging)
+                v.detail += L" · no informa su batería";
+            else if (d.stale)
+                v.detail += L" · en reposo";
+            out.push_back(v);
+        }
+        return out;
+    }
+
+    void Changed(Change what) override {
+        g->settings.Save();
+        if (what == Interval) RestartPollTimer();
+        if (what == Display) UpdateTray();
+        if (what == Display) RefreshSettingsWindow();  // "hide asleep" changes the list
+    }
+    void Rename(const std::wstring& id) override { bh::Rename(id); }
+    void Move(const std::wstring& id, int delta) override { MoveDevice(id, delta); }
+    void RefreshNow() override { StartPoll(); }
+    bool Autostart() override { return IsAutostartEnabled(); }
+    void SetAutostart(bool on) override {
+        if (!bh::SetAutostart(on))
+            MessageBoxW(SettingsWindowHandle(), L"No se pudo modificar el inicio automático.", L"BatteryHub",
+                        MB_ICONWARNING);
+    }
+    UpdateView Update() override {
+        UpdateView v;
+        v.latest = g->update.latest;
+        if (g->updateInstalling) v.state = UpdateView::Installing;
+        else if (g->updateChecking) v.state = UpdateView::Checking;
+        else if (g->update.ok && g->update.newer) v.state = UpdateView::Available;
+        else if (g->update.ok) v.state = UpdateView::UpToDate;
+        else if (g->updateChecked) v.state = UpdateView::Failed;
+        return v;
+    }
+    void CheckUpdate() override {
+        StartUpdateCheck(false);  // quiet: the window shows the result itself
+        RefreshSettingsWindow();
+    }
+    void InstallUpdate() override {
+        StartUpdateInstall();
+        RefreshSettingsWindow();
+    }
+};
+AppSettingsHost g_settingsHost;
+
+void OpenSettings() { OpenSettingsWindow(g->inst, &g_settingsHost); }
 
 // Dark/light popup menus. uxtheme's SetPreferredAppMode (ordinal 135, Windows 10
 // 1903+) is undocumented but what Explorer and most tray apps use; FlushMenuThemes
@@ -425,20 +514,8 @@ void ShowMenu(POINT pt) {
     g->menuIds.clear();
 
     // Devices, in the same order as the taskbar.
-    std::vector<const TrackedDevice*> shown;
-    for (const auto& d : g->devices.Devices())
-        if (IsVisible(d)) shown.push_back(&d);
-    auto rank = [](const std::wstring& id) {
-        const auto& o = g->settings.order;
-        for (size_t i = 0; i < o.size(); ++i)
-            if (o[i] == id) return (int)i;
-        return 1 << 20;
-    };
-    std::stable_sort(shown.begin(), shown.end(),
-                     [&](const TrackedDevice* a, const TrackedDevice* b) { return rank(a->r.id) < rank(b->r.id); });
-
     UINT idx = 0;
-    for (const TrackedDevice* dp : shown) {
+    for (const TrackedDevice* dp : ShownDevices()) {
         const TrackedDevice& d = *dp;
         std::wstring pct = d.r.percent >= 0 ? Fmt(L"%d%%", d.r.percent) : std::wstring(L"--");
         std::wstring text = DisplayName(d.r) + L"\t" + pct + L" · " + ConnName(d.r.conn);
@@ -455,52 +532,7 @@ void ShowMenu(POINT pt) {
     mb.Separator(menu);
     mb.Item(menu, MF_STRING, ID_REFRESH, L"Actualizar ahora", kGlyphRefresh);
 
-    HMENU mode = CreatePopupMenu();
-    mb.Item(mode, MF_STRING, ID_MODE_TASKBAR, L"Barra de tareas, a la izquierda");
-    mb.Item(mode, MF_STRING, ID_MODE_TASKBAR_CLOCK, L"Barra de tareas, junto al reloj");
-    mb.Item(mode, MF_STRING, ID_MODE_TRAY, L"Área de notificación (un ícono por dispositivo)");
-    UINT current = g->settings.trayIcons ? ID_MODE_TRAY
-                 : g->settings.widgetLeft ? ID_MODE_TASKBAR : ID_MODE_TASKBAR_CLOCK;
-    CheckMenuRadioItem(mode, ID_MODE_TASKBAR, ID_MODE_TRAY, current, MF_BYCOMMAND);
-
-    HMENU interval = CreatePopupMenu();
-    for (UINT i = 0; i < ARRAYSIZE(kIntervals); ++i) {
-        int s = kIntervals[i];
-        mb.Item(interval, MF_STRING, ID_INTERVAL_FIRST + i,
-                s < 60 ? Fmt(L"%d segundos", s) : Fmt(L"%d minuto%ls", s / 60, s >= 120 ? L"s" : L""));
-        if (g->settings.intervalSec == s)
-            CheckMenuRadioItem(interval, ID_INTERVAL_FIRST, ID_INTERVAL_FIRST + ARRAYSIZE(kIntervals) - 1,
-                               ID_INTERVAL_FIRST + i, MF_BYCOMMAND);
-    }
-    HMENU threshold = CreatePopupMenu();
-    for (UINT i = 0; i < ARRAYSIZE(kThresholds); ++i) {
-        mb.Item(threshold, MF_STRING, ID_THRESHOLD_FIRST + i, Fmt(L"%d %%", kThresholds[i]));
-        if (g->settings.lowThreshold == kThresholds[i])
-            CheckMenuRadioItem(threshold, ID_THRESHOLD_FIRST, ID_THRESHOLD_FIRST + ARRAYSIZE(kThresholds) - 1,
-                               ID_THRESHOLD_FIRST + i, MF_BYCOMMAND);
-    }
-    HMENU theme = CreatePopupMenu();
-    mb.Item(theme, MF_STRING, ID_THEME_FIRST + 0, L"Igual que Windows");
-    mb.Item(theme, MF_STRING, ID_THEME_FIRST + 1, L"Oscuro");
-    mb.Item(theme, MF_STRING, ID_THEME_FIRST + 2, L"Claro");
-    CheckMenuRadioItem(theme, ID_THEME_FIRST, ID_THEME_FIRST + 2, ID_THEME_FIRST + g->settings.menuTheme,
-                       MF_BYCOMMAND);
-
-    HMENU config = CreatePopupMenu();
-    mb.Item(config, MF_POPUP, (UINT_PTR)mode, L"Mostrar en", kGlyphDisplay);
-    mb.Item(config, MF_POPUP, (UINT_PTR)interval, L"Intervalo de actualización", kGlyphTimer);
-    mb.Item(config, MF_POPUP, (UINT_PTR)threshold, L"Umbral de batería baja", kGlyphBatteryLow);
-    mb.Item(config, MF_POPUP, (UINT_PTR)theme, L"Tema del menú", kGlyphTheme);
-    mb.Separator(config);
-    mb.Item(config, MF_STRING | (g->settings.hideDisconnected ? MF_CHECKED : 0), ID_HIDE_DISCONNECTED,
-            L"Ocultar dispositivos en reposo");
-    mb.Item(config, MF_STRING | (g->settings.gameMode ? MF_CHECKED : 0), ID_GAME_MODE,
-            L"Ocultar durante juegos a pantalla completa");
-    mb.Item(config,
-            MF_STRING | (g->settings.gameModeBrowsers ? MF_CHECKED : 0) | (g->settings.gameMode ? 0 : MF_GRAYED),
-            ID_GAME_MODE_BROWSERS, L"Ocultar también con el navegador a pantalla completa");
-    mb.Item(config, MF_STRING | (IsAutostartEnabled() ? MF_CHECKED : 0), ID_AUTOSTART, L"Iniciar con Windows");
-    mb.Item(menu, MF_POPUP, (UINT_PTR)config, L"Configuración", kGlyphSettings);
+    mb.Item(menu, MF_STRING, ID_SETTINGS, L"Configuración…", kGlyphSettings);
     mb.Separator(menu);
     // Update status, bottom of the menu.
     if (g->updateInstalling) {
@@ -536,35 +568,8 @@ void OnCommand(UINT id) {
         StartUpdateInstall();
     } else if (id == ID_REFRESH) {
         StartPoll();
-    } else if (id >= ID_INTERVAL_FIRST && id < ID_INTERVAL_FIRST + ARRAYSIZE(kIntervals)) {
-        g->settings.intervalSec = kIntervals[id - ID_INTERVAL_FIRST];
-        g->settings.Save();
-        RestartPollTimer();
-    } else if (id >= ID_THRESHOLD_FIRST && id < ID_THRESHOLD_FIRST + ARRAYSIZE(kThresholds)) {
-        g->settings.lowThreshold = kThresholds[id - ID_THRESHOLD_FIRST];
-        g->settings.Save();
-        UpdateTray();
-    } else if (id == ID_MODE_TASKBAR || id == ID_MODE_TASKBAR_CLOCK || id == ID_MODE_TRAY) {
-        g->settings.trayIcons = id == ID_MODE_TRAY;
-        if (id != ID_MODE_TRAY) g->settings.widgetLeft = id == ID_MODE_TASKBAR;
-        g->settings.Save();
-        UpdateTray();
-    } else if (id >= ID_THEME_FIRST && id <= ID_THEME_FIRST + 2) {
-        g->settings.menuTheme = (int)(id - ID_THEME_FIRST);
-        g->settings.Save();
-    } else if (id == ID_GAME_MODE) {
-        g->settings.gameMode = !g->settings.gameMode;
-        g->settings.Save();
-    } else if (id == ID_GAME_MODE_BROWSERS) {
-        g->settings.gameModeBrowsers = !g->settings.gameModeBrowsers;
-        g->settings.Save();
-    } else if (id == ID_HIDE_DISCONNECTED) {
-        g->settings.hideDisconnected = !g->settings.hideDisconnected;
-        g->settings.Save();
-        UpdateTray();
-    } else if (id == ID_AUTOSTART) {
-        if (!SetAutostart(!IsAutostartEnabled()))
-            MessageBoxW(g->hwnd, L"No se pudo modificar el inicio automático.", L"BatteryHub", MB_ICONWARNING);
+    } else if (id == ID_SETTINGS) {
+        OpenSettings();
     } else if (id == ID_EXIT) {
         DestroyWindow(g->hwnd);
     }
@@ -592,7 +597,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_APP_UPDATE_CHECKED: {
             std::unique_ptr<UpdateInfo> info((UpdateInfo*)lp);
             g->updateChecking = false;
+            g->updateChecked = true;
             if (info->ok || !g->update.ok) g->update = *info;  // keep a good result over a failed retry
+            RefreshSettingsWindow();
             if (wp) {  // the user asked: always answer
                 if (info->ok && info->newer) {
                     if (MessageBoxW(hwnd,
@@ -616,6 +623,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_APP_UPDATE_DONE: {
             std::unique_ptr<std::wstring> err((std::wstring*)lp);
             g->updateInstalling = false;
+            RefreshSettingsWindow();
             if (wp && StartUpdatedApp()) {
                 DestroyWindow(hwnd);  // the new version takes over once this instance is gone
                 return 0;
@@ -638,6 +646,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g->settings.order = order;
             g->settings.Save();
             UpdateTray();
+            RefreshSettingsWindow();
             return 0;
         }
 
@@ -664,6 +673,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g->polling = false;
             g->devices.Apply(std::move(*res));
             UpdateTray();
+            RefreshSettingsWindow();
             // Give back the pages touched by the poll (HID/SetupAPI buffers).
             SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
             if (g->pollAgain) {
@@ -738,6 +748,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
 
         case WM_DESTROY:
+            CloseSettingsWindow();
             KillTimer(hwnd, TIMER_POLL);
             KillTimer(hwnd, TIMER_DEBOUNCE);
             KillTimer(hwnd, TIMER_WIDGET);

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(BatteryHub VERSION 1.0.0 LANGUAGES CXX RC)
+project(BatteryHub VERSION 1.3.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +29,7 @@ add_executable(BatteryHub WIN32
   src/ui/icon_renderer.cpp
   src/ui/tray.cpp
   src/ui/taskbar_widget.cpp
+  src/ui/settings_window.cpp
   src/ui/app.cpp
   assets/app.rc
 )
@@ -38,7 +39,7 @@ target_compile_definitions(BatteryHub PRIVATE UNICODE _UNICODE
 target_include_directories(BatteryHub PRIVATE assets)
 # xinput1_4.dll is loaded at runtime (no import), so it is not linked here.
 target_link_libraries(BatteryHub PRIVATE
-  hid setupapi comctl32 winhttp cfgmgr32 bluetoothapis gdiplus shell32 user32 gdi32 advapi32 ole32)
+  hid setupapi comctl32 winhttp cfgmgr32 bluetoothapis gdiplus d2d1 dwrite shell32 user32 gdi32 advapi32 ole32)
 
 if(MSVC)
   set_property(TARGET BatteryHub PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")  # static CRT: portable exe
