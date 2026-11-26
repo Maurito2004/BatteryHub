@@ -34,6 +34,7 @@ void Settings::Load() {
     gameMode = ReadDword(HKEY_CURRENT_USER, kKey, L"GameMode", 1) != 0;
     gameModeBrowsers = ReadDword(HKEY_CURRENT_USER, kKey, L"GameModeBrowsers", 0) != 0;
     menuTheme = Clamp((int)ReadDword(HKEY_CURRENT_USER, kKey, L"MenuTheme", 0), 0, 2);
+    autoUpdate = ReadDword(HKEY_CURRENT_USER, kKey, L"AutoUpdate", 1) != 0;
     order.clear();
     DWORD size = 0;
     if (RegGetValueW(HKEY_CURRENT_USER, kKey, L"Order", RRF_RT_REG_MULTI_SZ, nullptr, nullptr, &size) ==
@@ -54,6 +55,7 @@ void Settings::Save() const {
     WriteDword(L"GameMode", gameMode ? 1 : 0);
     WriteDword(L"GameModeBrowsers", gameModeBrowsers ? 1 : 0);
     WriteDword(L"MenuTheme", (DWORD)menuTheme);
+    WriteDword(L"AutoUpdate", autoUpdate ? 1 : 0);
     std::wstring multi;  // REG_MULTI_SZ: "id1\0id2\0\0"
     for (const auto& id : order) multi += id + L'\0';
     multi += L'\0';

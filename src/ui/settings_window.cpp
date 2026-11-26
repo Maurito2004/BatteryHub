@@ -82,7 +82,7 @@ struct Act {
     bool None() const { return t == A_NONE; }
 };
 
-enum Key { K_MODE = 1, K_THEME, K_HIDE, K_INTERVAL, K_THRESHOLD, K_GAME, K_GAME_BROWSERS, K_AUTOSTART };
+enum Key { K_MODE = 1, K_THEME, K_HIDE, K_INTERVAL, K_THRESHOLD, K_GAME, K_GAME_BROWSERS, K_AUTOSTART, K_AUTO_UPDATE };
 enum Cmd { C_REFRESH = 1, C_CHECK, C_INSTALL, C_RELEASES, C_REPO, C_ISSUES };
 
 enum class Ctl { None, Toggle, Choice, Slider, Buttons, Device, Text };
@@ -465,7 +465,8 @@ std::vector<Group> BuildSection(int s) {
                     break;
                 }
                 case UpdateView::UpToDate:
-                    upd.rows.push_back(buttons(title, L"Tenés la última versión. Se vuelve a revisar una vez por día.",
+                    upd.rows.push_back(buttons(title, st.autoUpdate ? L"Tenés la última versión. Se vuelve a revisar una vez por día."
+                                                                    : L"Tenés la última versión.",
                                                {{L"Buscar de nuevo", C_CHECK}}));
                     break;
                 case UpdateView::Failed:
@@ -473,9 +474,14 @@ std::vector<Group> BuildSection(int s) {
                                                {{L"Reintentar", C_CHECK}, {L"Abrir descargas", C_RELEASES}}));
                     break;
                 default:
-                    upd.rows.push_back(buttons(title, L"Se revisa sola al arrancar y una vez por día.",
+                    upd.rows.push_back(buttons(title, st.autoUpdate ? L"Se revisa sola al arrancar y una vez por día."
+                                                                    : L"Revisión automática apagada.",
                                                {{L"Buscar actualizaciones", C_CHECK}}));
             }
+            upd.rows.push_back(toggle(L"Buscar actualizaciones automáticamente",
+                                      L"Consulta api.github.com al arrancar y una vez por día. Solo envía la versión "
+                                      L"de BatteryHub; nada de tus dispositivos.",
+                                      K_AUTO_UPDATE, st.autoUpdate));
             out.push_back(std::move(upd));
             break;
         }
@@ -934,6 +940,10 @@ void Do(const Act& a) {
                     host->Changed(SettingsHost::General);
                     break;
                 case K_AUTOSTART: host->SetAutostart(!host->Autostart()); break;
+                case K_AUTO_UPDATE:
+                    st.autoUpdate = !st.autoUpdate;
+                    host->Changed(SettingsHost::General);
+                    break;
             }
             break;
         case A_CHOOSE:

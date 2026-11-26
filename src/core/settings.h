@@ -15,6 +15,7 @@ struct Settings {
     bool gameMode = true;       // hide + stop polling while a full-screen game/app is in front
     bool gameModeBrowsers = false;  // also when a browser (video) is full screen
     int menuTheme = 0;          // 0 = follow Windows, 1 = dark, 2 = light
+    bool autoUpdate = true;     // check GitHub for a new version on start + daily (manual check always works)
     std::vector<std::wstring> order;  // device ids in the order the user dragged them
 
     void Load();

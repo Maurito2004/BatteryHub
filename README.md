@@ -227,6 +227,11 @@ HeadsetControl · PlayStation — driver `hid-playstation` de Linux.
 
 ## Versiones
 
+**1.3.1** (26/11/2026): interruptor para apagar la búsqueda automática de actualizaciones y
+política de firma y privacidad ([Code signing policy](#code-signing-policy)).
+
+**1.3.0** (25/11/2026): ventana de Configuración propia.
+
 **1.2.0** (23/11/2026) — actualizaciones desde el menú: avisa cuando hay versión nueva, la descarga,
 reemplaza el `.exe` y se reinicia sola (`--update` desde consola).
 
@@ -247,19 +252,61 @@ Windows 10, MSVC (`build.bat msvc`) y CMake están escritos pero todavía sin pr
   Shell_NotifyIcon, GDI+). Habría que separar una capa de plataforma: `hidraw`/`hidapi` y UPower/BlueZ
   en Linux, y un indicador de bandeja (StatusNotifierItem / AppIndicator) en lugar del widget.
 
-## Firma de código
+## Code signing policy
 
-Política de firma de código: las versiones publicadas en *Releases* se compilan en GitHub Actions a partir
-de este repositorio y, una vez aprobado el proyecto, se firman con el servicio gratuito
-[SignPath.io](https://about.signpath.io), con un certificado de
+> *En castellano:* las versiones de *Releases* se compilan en GitHub Actions desde este repo y se firman
+> con SignPath. Abajo están quién aprueba cada firma, qué conexiones hace BatteryHub y cómo desinstalarlo.
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
 [SignPath Foundation](https://signpath.org).
 
-- Autor y aprobador de las firmas: [Maurito2004](https://github.com/Maurito2004).
-- Solo se firma lo que sale de este repositorio a través del workflow `release.yml`; nada compilado a mano.
-- Privacidad: BatteryHub no envía datos a ningún lado. La única conexión que hace es consultar la última
-  versión en la API pública de GitHub (`api.github.com`) para avisar de actualizaciones.
+Only `BatteryHub.exe` built by the [`release.yml`](.github/workflows/release.yml) workflow from this
+repository is signed. Nothing built on a personal computer is ever signed, and BatteryHub contains no
+third-party binaries.
 
-Cómo se configura: [docs/signpath/README.md](docs/signpath/README.md).
+### Team roles
+
+| Role | Members |
+|------|---------|
+| Authors (committers) | [Maurito2004](https://github.com/Maurito2004) |
+| Reviewers | [Maurito2004](https://github.com/Maurito2004): every pull request from someone else is reviewed before merging |
+| Approvers | [Maurito2004](https://github.com/Maurito2004): every signing request is approved by hand in SignPath |
+
+All team members use multi-factor authentication on GitHub and SignPath.
+
+### Privacy policy
+
+BatteryHub has no telemetry, analytics or accounts. Information about your devices (names, battery
+levels) never leaves your computer. These are its only network connections:
+
+| Service | When | What is sent |
+|---------|------|--------------|
+| [GitHub API](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement) (`api.github.com`) | 30 s after start and then once a day, **only if** *Configuración… → General → Buscar actualizaciones automáticamente* is on (on by default). Also whenever you click *Buscar actualizaciones* | The BatteryHub version (in the User-Agent) |
+| GitHub Releases (`github.com`) | Only when you click *Actualizar a vX.Y.Z* | A download of the new `BatteryHub.exe` |
+
+Buttons such as *Ver novedades* or *Reportar un dispositivo* only open the page in your browser. Each service also
+sees your IP address, as with any website.
+
+### System changes
+
+BatteryHub needs no administrator rights and installs no services or drivers. It changes only these things:
+
+- `HKEY_CURRENT_USER\Software\BatteryHub`: settings, device names you chose and last known levels.
+- The value `BatteryHub` under `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`,
+  **only if you turn on** *Iniciar con Windows*. Turning it off removes it.
+- When you accept an update, it replaces its own `BatteryHub.exe` with the new version from GitHub
+  Releases and restarts.
+- To read the battery it sends standard read-only queries to your Bluetooth/USB devices. It never
+  changes their settings.
+
+### Uninstall
+
+1. *Configuración… → General* → turn off *Iniciar con Windows*, then close BatteryHub from its menu.
+2. Delete `BatteryHub.exe`.
+3. Optional, to also delete your settings, run in PowerShell:
+   `Remove-Item -Recurse HKCU:\Software\BatteryHub`
+
+How the signing is configured: [docs/signpath/README.md](docs/signpath/README.md).
 
 ## Licencia
 

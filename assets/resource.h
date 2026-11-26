@@ -6,6 +6,6 @@
 #define IDC_ALIAS 1002
 #define IDC_HINT 1003
 
-#define BH_VERSION_STR "1.3.0"
-#define BH_VERSION_WSTR L"1.3.0"
-#define BH_VERSION_NUM 1, 3, 0, 0
+#define BH_VERSION_STR "1.3.1"
+#define BH_VERSION_WSTR L"1.3.1"
+#define BH_VERSION_NUM 1, 3, 1, 0

@@ -690,7 +690,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_TIMER:
             if (wp == TIMER_UPDATE) {
                 SetTimer(hwnd, TIMER_UPDATE, 24u * 60 * 60 * 1000, nullptr);  // then once a day
-                StartUpdateCheck(false);
+                if (g->settings.autoUpdate) StartUpdateCheck(false);  // user can turn it off in Settings
                 return 0;
             }
             if (wp == TIMER_WIDGET) {

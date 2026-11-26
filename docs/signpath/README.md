@@ -6,7 +6,7 @@ BatteryHub ya está preparado para firmarse gratis con [SignPath Foundation](htt
 ## Qué ya está hecho en el repo
 
 - **Licencia MIT** (`LICENSE`): SignPath Foundation solo firma proyectos con licencia de código abierto.
-- **Política de firma** en el `README.md` (sección *Firma de código*): SignPath exige que esté en la
+- **Política de firma** en el `README.md` (sección *Code signing policy*, con roles, política de privacidad, cambios en el sistema y desinstalación; cada release la enlaza al pie): SignPath exige que esté en la
   página del proyecto.
 - **El exe lleva nombre y versión** (`assets/app.rc`: ProductName, FileVersion, CompanyName,
   LegalCopyright): SignPath comprueba esos metadatos al firmar.
